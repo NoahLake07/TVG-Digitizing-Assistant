@@ -1,5 +1,5 @@
 # Tape Digitizing Assistant
-TVG Digitizing Assistant is a Java-based desktop application designed to assist with the process of digitizing media. The application provides a user-friendly interface for managing and tracking the conversion of various media types.
+TVG Digitizing Assistant is a Java-based desktop application designed to assist with the process of digitizing media. The application provides a user-friendly interface for managing and tracking the conversion of various tape media types.
 
 ## Features
 - **Project Management**: The application allows users to create and manage projects. Each project can contain multiple conversions, usually per client, and each conversion represents a single digitization task.
@@ -23,6 +23,7 @@ The conversion details & management page
 - **Swing**: The user interface is built using the Swing toolkit, which provides a wide range of widgets for building GUIs in Java.
 
 ## Downloads
+Version 1.1 JAR: [Digitizing Assistant v1.1.zip](https://github.com/NoahLake07/Tape-Digitizing-Assistant/files/15372967/Digitizing.Assistant.v1.1.zip)
 Version 1.0 JAR: [DigitizingAssistant v1.0.zip](https://github.com/NoahLake07/Tape-Digitizing-Assistant/files/15368369/DigitizingAssistant.v1.0.zip)
 
 Please note that this application is a work in progress and may contain bugs or incomplete features. Contributions are welcome!
