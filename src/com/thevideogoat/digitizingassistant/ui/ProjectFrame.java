@@ -13,10 +13,11 @@ public class ProjectFrame extends JFrame {
     Project project;
 
     public ProjectFrame(Project project) {
-        super(project.getName() + " - TVG Digitizing Assistant");
+        super(project.getName() + " - TVG Digitizing Assistant" + " v" + DigitizingAssistant.VERSION);
         this.project = project;
         setSize(625, 450);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        DigitizingAssistant.setIcon(this);
 
         setupUI();
         setVisible(true);
@@ -33,7 +34,7 @@ public class ProjectFrame extends JFrame {
             conversionListPanel = new JPanel();
             conversionListPanel.setLayout(new BoxLayout(conversionListPanel, BoxLayout.Y_AXIS));
             conversionListPanel.setBorder(BorderFactory.createTitledBorder("Conversions"));
-            conversionListPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 150));
+            conversionListPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 315));
             sidebar.add(conversionListPanel);
 
             JButton newConversionBtn = new JButton("New Conversion");
@@ -49,6 +50,16 @@ public class ProjectFrame extends JFrame {
                 saveProject();
             });
             sidebar.add(newConversionBtn);
+
+            JButton projectManagementBtn = new JButton("Exit Project");
+            projectManagementBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+            projectManagementBtn.addActionListener(e -> {
+                saveProject();
+                DigitizingAssistant.getInstance().chooseProject();
+                dispose();
+            });
+            sidebar.add(Box.createVerticalGlue());
+            sidebar.add(projectManagementBtn);
 
             for(Conversion conversion : project.getConversions()){
                 addConversionToSidebar(conversion);

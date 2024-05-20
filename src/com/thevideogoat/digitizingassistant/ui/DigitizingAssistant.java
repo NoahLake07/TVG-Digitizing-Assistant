@@ -2,18 +2,25 @@ package com.thevideogoat.digitizingassistant.ui;
 
 import com.thevideogoat.digitizingassistant.data.Project;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Paths;
+import java.util.Objects;
 
 public class DigitizingAssistant {
 
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
+    public static final String VERSION = "1.1";
+
+    private static DigitizingAssistant instance;
 
     static {
         if (OS.contains("win")) {
@@ -32,6 +39,7 @@ public class DigitizingAssistant {
         JFrame projectChooser = new JFrame("Choose a project");
         projectChooser.setSize(300, 400);
         projectChooser.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setIcon(projectChooser);
 
         // project chooser panel
         JPanel panel = new JPanel();
@@ -44,6 +52,10 @@ public class DigitizingAssistant {
                 header.setAlignmentX(Component.LEFT_ALIGNMENT);
                 header.setFont(new Font("Arial", Font.BOLD, 20));
                 headerPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 50));
+
+                ImageIcon icon = new ImageIcon(DigitizingAssistant.getIcon().getScaledInstance(30, 30, Image.SCALE_SMOOTH));
+                JLabel iconLabel = new JLabel(icon);
+                headerPanel.add(iconLabel);
                 headerPanel.add(header);
             panel.add(headerPanel);
 
@@ -146,6 +158,29 @@ public class DigitizingAssistant {
         projectChooser.setVisible(true);
     }
 
+    public static void setIcon(JFrame frame){
+        try {
+            BufferedImage icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon.png")));
+            frame.setIconImage(icon);
+        } catch (IOException e) {
+            throw new Error("Failed to set icon.");
+        }
+    }
+
+    public static BufferedImage getIcon(){
+        BufferedImage icon = null;
+        try {
+            icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon.png")));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return icon;
+    }
+
+    public static DigitizingAssistant getInstance() {
+        return instance;
+    }
+
     public static void main(String[] args) throws RuntimeException {
         if(!PROJECTS_DIRECTORY.exists()){
             PROJECTS_DIRECTORY.mkdir();
@@ -157,7 +192,8 @@ public class DigitizingAssistant {
             throw new Error("Could not set system look and feel.");
         }
 
-        new DigitizingAssistant().chooseProject();
+        instance = new DigitizingAssistant();
+        instance.chooseProject();
     }
 
 }

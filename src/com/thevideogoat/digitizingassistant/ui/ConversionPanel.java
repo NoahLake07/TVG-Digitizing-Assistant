@@ -1,22 +1,28 @@
 package com.thevideogoat.digitizingassistant.ui;
 
 import com.thevideogoat.digitizingassistant.data.Conversion;
+import com.thevideogoat.digitizingassistant.data.ConversionStatus;
 import com.thevideogoat.digitizingassistant.data.Type;
 
 import javax.swing.*;
+import javax.swing.border.BevelBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.Objects;
+
+import static java.util.Objects.requireNonNullElse;
 
 public class ConversionPanel extends JPanel {
 
     ProjectFrame projectFrame;
     Conversion conversion;
 
-    JPanel typeRow, noteRow, filesPanel, dateRow, timeRow, buttonRow;
+    JPanel typeRow, noteRow, filesPanel, dateRow, timeRow, buttonRow, statusRow;
     JLabel header, type, note;
     JComboBox<Type> typeSelector;
+    JComboBox<ConversionStatus> statusSelector;
     JComboBox<String> amPmSelector;
     JTextField noteField;
     JSpinner mmField, ddField, yyyyField, hhField;
@@ -212,6 +218,21 @@ public class ConversionPanel extends JPanel {
             }
             amPmSelector.setPreferredSize(new Dimension(50, 20));
 
+        // status
+        statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        statusRow.setMaximumSize(basicRowMaxSize);
+        statusRow.setBorder(BorderFactory.createTitledBorder("Current Status"));
+        statusSelector = new JComboBox<>(ConversionStatus.values());
+        statusSelector.setSelectedItem(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
+
+            StatusIndicator statusIndicator = new StatusIndicator();
+            statusSelector.addActionListener(e -> {
+                ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
+                statusIndicator.updateColor(selectedStatus);
+            });
+        statusRow.add(statusIndicator);
+        statusRow.add(statusSelector);
+
         // button row
         buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonRow.setMaximumSize(basicRowMaxSize);
@@ -231,6 +252,7 @@ public class ConversionPanel extends JPanel {
             conversion.timeOfConversion.hour = finalHhSpinner.getValue().toString();
             conversion.timeOfConversion.minute = finalMmSpinner.getValue().toString();
             conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
+            conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
 
             // save the project (serialize it)
             projectFrame.saveProject();
@@ -241,9 +263,35 @@ public class ConversionPanel extends JPanel {
         add(typeRow);
         add(noteRow);
         add(filesPanel);
+        add(statusRow);
         add(dateRow);
         add(timeRow);
         add(buttonRow);
+    }
+
+    public class StatusIndicator extends JPanel {
+        public StatusIndicator() {
+            setPreferredSize(new Dimension(20, 20)); // Set the size of the panel
+            setBorder(BorderFactory.createBevelBorder(BevelBorder.LOWERED)); // Set the border of the panel
+            updateColor(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
+        }
+
+        public void updateColor(ConversionStatus status) {
+            switch (status) {
+                case NOT_STARTED:
+                    setBackground(new Color(59, 59, 59));
+                    break;
+                case IN_PROGRESS:
+                    setBackground(new Color(255, 165, 0));
+                    break;
+                case BASIC_EDITING:
+                    setBackground(new Color(83, 25, 194));
+                    break;
+                case COMPLETED:
+                    setBackground(new Color(0, 128, 0));
+                    break;
+            }
+        }
     }
 
 }
