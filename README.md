@@ -8,12 +8,13 @@ TVG Digitizing Assistant is a Java-based desktop application designed to assist 
 - **Data Persistence**: The application supports saving the current state of a project to a file. This allows users to close the application and resume their work at a later time.
 
 ## Application Screenshots
-![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/b45ba94c-866c-4182-a99f-8bd22bedb07a)
+
+![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/010f61b9-0621-46b1-a73e-adfc59f22ee8)
 
 Home - Project select page
 
 
-![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/7615603d-3512-450e-a724-81fc1f01b80a)
+![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/208908e1-9145-4bb8-9862-541c5ba35101)
 
 The conversion details & management page
 
