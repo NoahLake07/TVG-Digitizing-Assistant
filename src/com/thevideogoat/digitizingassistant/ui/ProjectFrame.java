@@ -76,6 +76,15 @@ public class ProjectFrame extends JFrame {
         add(splitPane);
     }
 
+    private void displayTempContentPanel(){
+        // temporary message panel
+        JPanel tempContentPanel = new JPanel(new GridBagLayout());
+        JLabel message = new JLabel("Select a conversion from the sidebar to view details.");
+        message.setFont(new Font("Arial", Font.BOLD, 13));
+        tempContentPanel.add(message);
+        splitPane.setRightComponent(tempContentPanel);
+    }
+
     private void addConversionToSidebar(Conversion conversion){
         JButton conversionBtn = new JButton(conversion.name);
         conversionBtn.addActionListener(e -> {
@@ -86,6 +95,22 @@ public class ProjectFrame extends JFrame {
         conversionListPanel.add(conversionBtn);
         conversionListPanel.revalidate();
         conversionListPanel.repaint();
+    }
+
+    public void remove(ConversionPanel conversion){
+        for(Component c : conversionListPanel.getComponents()){
+            if(c instanceof JButton){
+                JButton btn = (JButton) c;
+                if(btn.getText().equals(conversion.conversion.name)){
+                    conversionListPanel.remove(btn);
+                    conversionListPanel.revalidate();
+                    conversionListPanel.repaint();
+                    break;
+                }
+            }
+        }
+        saveProject();
+        displayTempContentPanel();
     }
 
     public void saveProject(){

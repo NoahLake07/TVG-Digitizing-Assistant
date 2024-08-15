@@ -10,6 +10,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.time.Duration;
 import java.util.Objects;
 
 import static java.util.Objects.requireNonNullElse;
@@ -19,13 +20,14 @@ public class ConversionPanel extends JPanel {
     ProjectFrame projectFrame;
     Conversion conversion;
 
-    JPanel typeRow, noteRow, filesPanel, dateRow, timeRow, buttonRow, statusRow;
+    JPanel typeRow, noteRow, filesPanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
     JLabel header, type, note;
     JComboBox<Type> typeSelector;
     JComboBox<ConversionStatus> statusSelector;
     JComboBox<String> amPmSelector;
     JTextField noteField;
-    JSpinner mmField, ddField, yyyyField, hhField;
+    JSpinner mmSpinner, ddSpinner, yyyySpinner, hhSpinner, minSpinner, tapeDurationSpinner;
+
 
     JButton addFileBtn, saveBtn;
 
@@ -158,7 +160,6 @@ public class ConversionPanel extends JPanel {
             dateRow.setBorder(BorderFactory.createTitledBorder("Date of Conversion"));
             dateRow.setMaximumSize(basicRowMaxSize);
             SpinnerNumberModel mmModel, ddModel, yyyyModel;
-            JSpinner mmSpinner, ddSpinner, yyyySpinner;
             try {
                 mmModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getMonth()), 1, 12, 1);
                 mmSpinner = new JSpinner(mmModel);
@@ -185,7 +186,6 @@ public class ConversionPanel extends JPanel {
             timeRow.setBorder(BorderFactory.createTitledBorder("Time of Conversion"));
             timeRow.setMaximumSize(basicRowMaxSize);
 
-            JSpinner hhSpinner, minSpinner;
             try {
                 SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
                 hhSpinner = new JSpinner(hhModel);
@@ -218,6 +218,15 @@ public class ConversionPanel extends JPanel {
             }
             amPmSelector.setPreferredSize(new Dimension(50, 20));
 
+        // tape duration
+        tapeDurationRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        tapeDurationRow.setMaximumSize(basicRowMaxSize);
+        JLabel tapeDurationLabel = new JLabel("Tape Duration (minutes)");
+        SpinnerNumberModel tapeDurationModel = new SpinnerNumberModel((int) conversion.duration.toMinutes(), 0, Integer.MAX_VALUE, 1);
+        tapeDurationSpinner = new JSpinner(tapeDurationModel);
+        tapeDurationRow.add(tapeDurationLabel);
+        tapeDurationRow.add(tapeDurationSpinner);
+
         // status
         statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         statusRow.setMaximumSize(basicRowMaxSize);
@@ -229,34 +238,51 @@ public class ConversionPanel extends JPanel {
             statusSelector.addActionListener(e -> {
                 ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
                 statusIndicator.updateColor(selectedStatus);
+                if(selectedStatus == ConversionStatus.COMPLETED || selectedStatus == ConversionStatus.BASIC_EDITING){
+                    tapeDurationRow.setVisible(true);
+                } else {
+                    tapeDurationRow.setVisible(false);
+                }
             });
         statusRow.add(statusIndicator);
         statusRow.add(statusSelector);
+
+        ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
+        if(selectedStatus == ConversionStatus.COMPLETED || selectedStatus == ConversionStatus.BASIC_EDITING){
+            tapeDurationRow.setVisible(true);
+        } else {
+            tapeDurationRow.setVisible(false);
+        }
 
         // button row
         buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonRow.setMaximumSize(basicRowMaxSize);
         saveBtn = new JButton("Save");
-        JSpinner finalMmSpinner = mmSpinner;
-        JSpinner finalDdSpinner = ddSpinner;
-        JSpinner finalYyyySpinner = yyyySpinner;
-        JSpinner finalHhSpinner = hhSpinner;
         saveBtn.addActionListener(e -> {
             // save the conversion
             conversion.name = header.getText();
             conversion.note = noteField.getText();
             conversion.type = (Type) typeSelector.getSelectedItem();
-            conversion.dateOfConversion.month = finalMmSpinner.getValue().toString();
-            conversion.dateOfConversion.day = finalDdSpinner.getValue().toString();
-            conversion.dateOfConversion.year = finalYyyySpinner.getValue().toString();
-            conversion.timeOfConversion.hour = finalHhSpinner.getValue().toString();
-            conversion.timeOfConversion.minute = finalMmSpinner.getValue().toString();
+            conversion.dateOfConversion.month = mmSpinner.getValue().toString();
+            conversion.dateOfConversion.day = ddSpinner.getValue().toString();
+            conversion.dateOfConversion.year = yyyySpinner.getValue().toString();
+            conversion.timeOfConversion.hour = hhSpinner.getValue().toString();
+            conversion.timeOfConversion.minute = mmSpinner.getValue().toString();
             conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
             conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
+            conversion.duration = Duration.ofMinutes((Integer) tapeDurationSpinner.getValue());
 
             // save the project (serialize it)
             projectFrame.saveProject();
         });
+        JButton deleteBtn = new JButton("Delete");
+        deleteBtn.addActionListener(e -> {
+            // delete the conversion
+            projectFrame.remove(this);
+            projectFrame.saveProject();
+        });
+
+        buttonRow.add(deleteBtn);
         buttonRow.add(saveBtn);
 
         // add components to the panel
@@ -266,13 +292,14 @@ public class ConversionPanel extends JPanel {
         add(statusRow);
         add(dateRow);
         add(timeRow);
+        add(tapeDurationRow);
         add(buttonRow);
     }
 
     public class StatusIndicator extends JPanel {
         public StatusIndicator() {
-            setPreferredSize(new Dimension(20, 20)); // Set the size of the panel
-            setBorder(BorderFactory.createBevelBorder(BevelBorder.LOWERED)); // Set the border of the panel
+            setPreferredSize(new Dimension(20, 20));
+            setBorder(BorderFactory.createBevelBorder(BevelBorder.LOWERED));
             updateColor(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
         }
 
