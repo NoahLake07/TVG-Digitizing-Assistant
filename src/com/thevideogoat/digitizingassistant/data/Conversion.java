@@ -17,7 +17,7 @@ public class Conversion implements Serializable {
     public Time timeOfConversion;
     public ConversionStatus status;
     public String version;
-    public Duration duration;
+    public Duration duration = Duration.ZERO;
 
     public Conversion(String name){
         // assign name

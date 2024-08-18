@@ -82,8 +82,7 @@ public class Pricing {
         tapeFormatPricing.put(Type._8MM, PRICE_8MM);
         tapeFormatPricing.put(Type.BETAMAX, PRICE_BETAMAX);
         tapeFormatPricing.put(Type.MINIDV, PRICE_MINIDV);
-        tapeFormatPricing.put(Type.CD, PRICE_CD_DVD);
-        tapeFormatPricing.put(Type.DVD, PRICE_CD_DVD);
+        tapeFormatPricing.put(Type.CD_DVD, PRICE_CD_DVD);
     }
 
     public double calculateProjectCost(Project project) {
@@ -149,8 +148,11 @@ public class Pricing {
         Duration duration;
         double price;
         List<Map<String, String>> breakdown;
+        String name, notes;
 
         public TapeInfo(Conversion c) {
+            this.name = c.name;
+            this.notes = c.note;
             this.type = c.type;
             this.duration = c.duration;
             this.breakdown = new ArrayList<>();
@@ -164,12 +166,21 @@ public class Pricing {
             calculatePrice();
         }
 
-        protected void calculatePrice() {
+        /**
+         * @return a double[] containing cost info for each tape
+         *     <p>- 0: base price for tape</p>
+         *     <p>- 1: additional charge for extra hours</p>
+         *     <p>- 2: total price for tape</p>
+         */
+        protected double[] calculatePrice() {
+
+            double[] var = new double[2];
+
             if (type != null && duration != null) {
                 // BASE PRICE
                 double basePrice = 0.00;
                 switch (type) {
-                    case DVD, CD -> basePrice = PRICE_CD_DVD;
+                    case CD_DVD -> basePrice = PRICE_CD_DVD;
                     case VHS -> basePrice = PRICE_VHS;
                     case VHSC -> basePrice = PRICE_VHSC;
                     case _8MM -> basePrice = PRICE_8MM;
@@ -177,6 +188,8 @@ public class Pricing {
                     case MINIDV -> basePrice = PRICE_MINIDV;
                 }
                 price += basePrice;
+                var[0] = basePrice;
+
                 Map<String, String> basePriceEntry = new HashMap<>();
                 basePriceEntry.put("Description", "Base Price for " + type);
                 basePriceEntry.put("Cost", "$" + basePrice);
@@ -184,17 +197,24 @@ public class Pricing {
 
                 // TAPE DURATION
                 if (duration.toMinutes() > STANDARD_TAPE_LENGTH) {
+                    double durationCost = 0.00;
                     for (double i = STANDARD_TAPE_LENGTH; i < duration.toMinutes(); i += 60.00) {
+                        durationCost += PRICE_PER_ADDITIONAL_HOUR;
                         price += PRICE_PER_ADDITIONAL_HOUR;
+
                         Map<String, String> additionalHourEntry = new HashMap<>();
                         additionalHourEntry.put("Description", "Additional Hour Charge");
                         additionalHourEntry.put("Cost", "$" + PRICE_PER_ADDITIONAL_HOUR);
                         breakdown.add(additionalHourEntry);
                     }
+                    var[1] = durationCost;
                 } else {
                     price = basePrice;
+                    var[1] = basePrice;
                 }
             }
+
+            return var;
         }
 
         public List<Map<String, String>> getBreakdown() {
@@ -204,15 +224,76 @@ public class Pricing {
 
     public static void main(String[] args) {
         Project testProject = new Project("Test Project");
-        for (int i = 0; i <= 20; i++) {
-            Conversion c = new Conversion("VHS " + i);
-            c. duration = Duration.ofMinutes(125);
-            c. type = Type.VHS;
-            testProject.addConversion(c);
-        }
+        addConversionToProject(Type.VHS, 34, testProject);
+        addConversionToProject(Type.VHSC, 1, testProject);
+        addConversionToProject(Type._8MM, 15, testProject);
+        addConversionToProject(Type.BETAMAX, 0, testProject);
+        addConversionToProject(Type.MINIDV, 8, testProject);
+        addConversionToProject(Type.CD_DVD, 68, testProject);
 
         Pricing pricing = new Pricing();
         pricing.calculateProjectCost(testProject);
+    }
+
+    private static void addConversionToProject(Type type, int qty, Project project){
+        for (int i = 0; i < qty; i++) {
+            Conversion c = new Conversion(type.toString()+" "+ i);
+            c. duration = Duration.ofMinutes(120);
+            c. type = type;
+            project.addConversion(c);
+        }
+    }
+
+    class Quote {
+        String projectName;
+        ArrayList<TapeInfo> tapes;
+        double totalCost;
+
+        HashMap<Type,QtyPrice> tapeData;
+
+        public Quote(String projectName, ArrayList<TapeInfo> tapes) {
+            this.projectName = projectName;
+            this.tapes = tapes;
+
+            totalCost = 0.00;
+            for (TapeInfo t : tapes) {
+                totalCost += t.price;
+            }
+
+            tapeData = new HashMap<>();
+            for (TapeInfo t : tapes) {
+                if (tapeData.containsKey(t.type)) {
+                    tapeData.get(t.type).qty++;
+                } else {
+
+                }
+            }
+        }
+
+        public String toString(){
+            StringBuilder sb = new StringBuilder();
+            sb.append("Project Quote: " + projectName);
+            sb.append("==============================\n");
+            sb.append("Name\tQty\tEst. Price");
+            for(Type type : Type.values()){
+                if(tapeData.get(type) != null){
+                    QtyPrice data = tapeData.get(type);
+                    sb.append(type.toString() + "\t" + data.qty +"\t"+ data.price);
+                }
+            }
+
+            return sb.toString();
+        }
+    }
+
+    class QtyPrice{
+        int qty;
+        int price;
+
+        public QtyPrice(int qty, int price){
+            this.qty = qty;
+            this.price = price;
+        }
     }
 
 }

@@ -9,6 +9,7 @@ import java.awt.*;
 public class ProjectFrame extends JFrame {
 
     JPanel sidebar, conversionListPanel;
+    JScrollPane conversionScrollPane;
     JSplitPane splitPane;
     Project project;
 
@@ -16,7 +17,7 @@ public class ProjectFrame extends JFrame {
         super(project.getName() + " - TVG Digitizing Assistant" + " v" + DigitizingAssistant.VERSION);
         this.project = project;
         setSize(625, 450);
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         DigitizingAssistant.setIcon(this);
 
         setupUI();
@@ -31,39 +32,42 @@ public class ProjectFrame extends JFrame {
         sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
         sidebar.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-            conversionListPanel = new JPanel();
-            conversionListPanel.setLayout(new BoxLayout(conversionListPanel, BoxLayout.Y_AXIS));
-            conversionListPanel.setBorder(BorderFactory.createTitledBorder("Conversions"));
-            conversionListPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 315));
-            sidebar.add(conversionListPanel);
 
-            JButton newConversionBtn = new JButton("New Conversion");
-            newConversionBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-            newConversionBtn.addActionListener(e -> {
-                // create a new conversion
-                String conversionName = JOptionPane.showInputDialog("Conversion Name:");
-                if(conversionName != null){
-                    Conversion c = new Conversion(conversionName);
-                    addConversionToSidebar(c);
-                    project.addConversion(c);
-                }
-                saveProject();
-            });
-            sidebar.add(newConversionBtn);
+        conversionListPanel = new JPanel();
+        conversionListPanel.setLayout(new GridLayout(0, 1, 5, 5)); // Uniform button sizes
+        conversionScrollPane = new JScrollPane(conversionListPanel);
+        conversionScrollPane.setBorder(BorderFactory.createTitledBorder("Conversions"));
+        conversionScrollPane.setMaximumSize(new Dimension(Short.MAX_VALUE, 315));
+        sidebar.add(conversionScrollPane);
 
-            JButton projectManagementBtn = new JButton("Exit Project");
-            projectManagementBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
-            projectManagementBtn.addActionListener(e -> {
-                saveProject();
-                DigitizingAssistant.getInstance().chooseProject();
-                dispose();
-            });
-            sidebar.add(Box.createVerticalGlue());
-            sidebar.add(projectManagementBtn);
-
-            for(Conversion conversion : project.getConversions()){
-                addConversionToSidebar(conversion);
+        JButton newConversionBtn = new JButton("New Conversion");
+        newConversionBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        newConversionBtn.addActionListener(e -> {
+            // create a new conversion
+            String conversionName = JOptionPane.showInputDialog("Conversion Name:");
+            if(conversionName != null){
+                Conversion c = new Conversion(conversionName);
+                addConversionToSidebar(c);
+                project.addConversion(c);
+                splitPane.setRightComponent(new ConversionPanel(c,this));
             }
+            saveProject();
+        });
+        sidebar.add(newConversionBtn);
+
+        JButton projectManagementBtn = new JButton("Exit Project");
+        projectManagementBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        projectManagementBtn.addActionListener(e -> {
+            saveProject();
+            DigitizingAssistant.getInstance().chooseProject();
+            dispose();
+        });
+        sidebar.add(Box.createVerticalGlue());
+        sidebar.add(projectManagementBtn);
+
+        for(Conversion conversion : project.getConversions()){
+            addConversionToSidebar(conversion);
+        }
 
         // temporary message panel
         JPanel tempContentPanel = new JPanel(new GridBagLayout());
@@ -109,8 +113,14 @@ public class ProjectFrame extends JFrame {
                 }
             }
         }
-        saveProject();
+
+        for(Conversion c : project.getConversions()){
+            if(c.name.equals(conversion.conversion.name)){
+                project.getConversions().remove(c);
+            }
+        }
         displayTempContentPanel();
+        saveProject();
     }
 
     public void saveProject(){

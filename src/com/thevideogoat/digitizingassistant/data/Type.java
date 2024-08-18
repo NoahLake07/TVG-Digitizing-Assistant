@@ -7,8 +7,8 @@ public enum Type {
     _8MM("8mm"),
     BETAMAX("Betamax"),
     MINIDV("MiniDV"),
-    CD("CD"),
-    DVD("DVD"),
+    CD_DVD("CD/DVD"),
+    TYPE_II("Type II"),
     ;
 
     final String name;

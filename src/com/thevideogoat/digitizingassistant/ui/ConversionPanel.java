@@ -51,6 +51,25 @@ public class ConversionPanel extends JPanel {
         headerRow.add(header);
         add(headerRow);
 
+        // rename conversion
+        JPopupMenu renameMenu = new JPopupMenu();
+        JMenuItem renameMenuItem = new JMenuItem("Rename");
+        renameMenuItem.addActionListener(e -> {
+            String newName = JOptionPane.showInputDialog("Rename Conversion", conversion.name);
+            if(newName != null){
+                conversion.name = newName;
+                header.setText(newName);
+            }
+        });
+        renameMenu.add(renameMenuItem);
+        header.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent me) {
+                if (SwingUtilities.isRightMouseButton(me)) {
+                    renameMenu.show(header, me.getX(), me.getY());
+                }
+            }
+        });
+
         // type
         typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         typeRow.setMaximumSize(basicRowMaxSize);
@@ -159,22 +178,7 @@ public class ConversionPanel extends JPanel {
             dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
             dateRow.setBorder(BorderFactory.createTitledBorder("Date of Conversion"));
             dateRow.setMaximumSize(basicRowMaxSize);
-            SpinnerNumberModel mmModel, ddModel, yyyyModel;
-            try {
-                mmModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getMonth()), 1, 12, 1);
-                mmSpinner = new JSpinner(mmModel);
-                ddModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getDay()), 1, 31, 1);
-                ddSpinner = new JSpinner(ddModel);
-                yyyyModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getYear()), 1900, 2100, 1);
-                yyyySpinner = new JSpinner(yyyyModel);
-            } catch (NumberFormatException e) {
-                mmModel = new SpinnerNumberModel(1, 1, 12, 1);
-                mmSpinner = new JSpinner(mmModel);
-                ddModel = new SpinnerNumberModel(1, 1, 31, 1);
-                ddSpinner = new JSpinner(ddModel);
-                yyyyModel = new SpinnerNumberModel(2000, 1900, 2100, 1);
-                yyyySpinner = new JSpinner(yyyyModel);
-            }
+            setupDateTimeSpinners(); // setting time to now
             JSpinner.NumberEditor yyyyEditor = new JSpinner.NumberEditor(yyyySpinner, "0000");
             yyyySpinner.setEditor(yyyyEditor);
             dateRow.add(mmSpinner);
@@ -233,6 +237,8 @@ public class ConversionPanel extends JPanel {
         statusRow.setBorder(BorderFactory.createTitledBorder("Current Status"));
         statusSelector = new JComboBox<>(ConversionStatus.values());
         statusSelector.setSelectedItem(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
+        Dimension prefSize = new Dimension(150,20);
+        statusSelector.setPreferredSize(prefSize);
 
             StatusIndicator statusIndicator = new StatusIndicator();
             statusSelector.addActionListener(e -> {
@@ -243,6 +249,17 @@ public class ConversionPanel extends JPanel {
                 } else {
                     tapeDurationRow.setVisible(false);
                 }
+                if(selectedStatus == ConversionStatus.NOT_STARTED){
+                    dateRow.setVisible(false);
+                    timeRow.setVisible(false);
+                } else {
+                    dateRow.setVisible(true);
+                    timeRow.setVisible(true);
+                    if(selectedStatus == ConversionStatus.IN_PROGRESS){
+                        setupDateTimeSpinners();
+                    }
+                }
+                statusSelector.setPreferredSize(prefSize);
             });
         statusRow.add(statusIndicator);
         statusRow.add(statusSelector);
@@ -252,6 +269,14 @@ public class ConversionPanel extends JPanel {
             tapeDurationRow.setVisible(true);
         } else {
             tapeDurationRow.setVisible(false);
+        }
+
+        if(selectedStatus == ConversionStatus.NOT_STARTED){
+            dateRow.setVisible(false);
+            timeRow.setVisible(false);
+        } else {
+            dateRow.setVisible(true);
+            timeRow.setVisible(true);
         }
 
         // button row
@@ -294,6 +319,25 @@ public class ConversionPanel extends JPanel {
         add(timeRow);
         add(tapeDurationRow);
         add(buttonRow);
+    }
+
+    private void setupDateTimeSpinners(){
+        SpinnerNumberModel mmModel, ddModel, yyyyModel;
+        try {
+            mmModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getMonth()), 1, 12, 1);
+            mmSpinner = new JSpinner(mmModel);
+            ddModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getDay()), 1, 31, 1);
+            ddSpinner = new JSpinner(ddModel);
+            yyyyModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getYear()), 1900, 2100, 1);
+            yyyySpinner = new JSpinner(yyyyModel);
+        } catch (NumberFormatException e) {
+            mmModel = new SpinnerNumberModel(1, 1, 12, 1);
+            mmSpinner = new JSpinner(mmModel);
+            ddModel = new SpinnerNumberModel(1, 1, 31, 1);
+            ddSpinner = new JSpinner(ddModel);
+            yyyyModel = new SpinnerNumberModel(2000, 1900, 2100, 1);
+            yyyySpinner = new JSpinner(yyyyModel);
+        }
     }
 
     public class StatusIndicator extends JPanel {
