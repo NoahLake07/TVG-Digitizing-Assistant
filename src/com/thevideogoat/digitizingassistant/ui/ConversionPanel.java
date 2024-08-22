@@ -3,6 +3,7 @@ package com.thevideogoat.digitizingassistant.ui;
 import com.thevideogoat.digitizingassistant.data.Conversion;
 import com.thevideogoat.digitizingassistant.data.ConversionStatus;
 import com.thevideogoat.digitizingassistant.data.Type;
+import com.thevideogoat.digitizingassistant.data.Util;
 
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
@@ -11,6 +12,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Objects;
 
 import static java.util.Objects.requireNonNullElse;
@@ -20,8 +23,9 @@ public class ConversionPanel extends JPanel {
     ProjectFrame projectFrame;
     Conversion conversion;
 
-    JPanel typeRow, noteRow, filesPanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
+    JPanel typeRow, noteRow, filesPanel, filenamePanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
     JLabel header, type, note;
+    JList<File> filesList;
     JComboBox<Type> typeSelector;
     JComboBox<ConversionStatus> statusSelector;
     JComboBox<String> amPmSelector;
@@ -94,7 +98,7 @@ public class ConversionPanel extends JPanel {
         filesPanel.setLayout(new BoxLayout(filesPanel, BoxLayout.Y_AXIS));
         filesPanel.setBorder(BorderFactory.createTitledBorder("Linked Files"));
         filesPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 150));
-            JList<File> filesList = new JList<>();
+            filesList = new JList<>();
             filesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
             filesList.setLayoutOrientation(JList.VERTICAL);
             filesList.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
@@ -131,6 +135,7 @@ public class ConversionPanel extends JPanel {
             JPopupMenu popupMenu = new JPopupMenu();
             JMenuItem openMenuItem = new JMenuItem("Open File");
             JMenuItem openFileLocationItem = new JMenuItem("Open File Location");
+            JMenuItem renameFile = new JMenuItem("Auto Rename");
             JMenuItem removeMenuItem = new JMenuItem("Remove");
             openMenuItem.addActionListener(e -> {
                 int selectedIndex = filesList.getSelectedIndex();
@@ -154,6 +159,10 @@ public class ConversionPanel extends JPanel {
                     }
                 }
             });
+            renameFile.addActionListener(e -> {
+                Util.renameFile(listModel.getElementAt(filesList.getSelectedIndex()), conversion.name);
+                updateLinkedFiles();
+            });
             removeMenuItem.addActionListener(e -> {
                 int selectedIndex = filesList.getSelectedIndex();
                 if (selectedIndex != -1) {
@@ -174,53 +183,99 @@ public class ConversionPanel extends JPanel {
                 }
             });
 
-            // date
-            dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            dateRow.setBorder(BorderFactory.createTitledBorder("Date of Conversion"));
-            dateRow.setMaximumSize(basicRowMaxSize);
-            setupDateTimeSpinners(); // setting time to now
-            JSpinner.NumberEditor yyyyEditor = new JSpinner.NumberEditor(yyyySpinner, "0000");
-            yyyySpinner.setEditor(yyyyEditor);
-            dateRow.add(mmSpinner);
-            dateRow.add(ddSpinner);
-            dateRow.add(yyyySpinner);
+        // filename panel
+        filenamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        filenamePanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
+        filenamePanel.setBorder(BorderFactory.createTitledBorder("Filenames"));
+        JButton renameAll = new JButton("Rename Linked Files");
+        renameAll.addActionListener(e->{
+            Util.renameLinkedFiles(conversion);
+            updateLinkedFiles();
+        });
+        filenamePanel.add(renameAll);
 
-            // time
-            timeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-            timeRow.setBorder(BorderFactory.createTitledBorder("Time of Conversion"));
-            timeRow.setMaximumSize(basicRowMaxSize);
+        // date
+        dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        dateRow.setBorder(BorderFactory.createTitledBorder("Date of Conversion"));
+        dateRow.setMaximumSize(basicRowMaxSize);
+        setupDateTimeSpinners(); // setting time to now
+        JSpinner.NumberEditor yyyyEditor = new JSpinner.NumberEditor(yyyySpinner, "0000");
+        yyyySpinner.setEditor(yyyyEditor);
+        dateRow.add(mmSpinner);
+        dateRow.add(ddSpinner);
+        dateRow.add(yyyySpinner);
 
-            try {
-                SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
-                hhSpinner = new JSpinner(hhModel);
-                if (conversion.timeOfConversion.hour != null)
-                    hhSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getHour()));
-                SpinnerNumberModel minModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getMinute()), 0, 59, 1);
-                minSpinner = new JSpinner(minModel);
-                JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
-                minSpinner.setEditor(editor);
-                if (conversion.timeOfConversion.minute != null)
-                    minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
-                timeRow.add(hhSpinner);
-                timeRow.add(minSpinner);
-                amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
-                if (conversion.timeOfConversion.getAmPm() != null)
-                    amPmSelector.setSelectedItem(conversion.timeOfConversion.getAmPm());
-                timeRow.add(amPmSelector);
-            } catch (NumberFormatException e) {
-                SpinnerNumberModel hhModel = new SpinnerNumberModel(12, 1, 12, 1);
-                hhSpinner = new JSpinner(hhModel);
-                SpinnerNumberModel minModel = new SpinnerNumberModel(0, 0, 59, 1);
-                minSpinner = new JSpinner(minModel);
-                JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
-                minSpinner.setEditor(editor);
-                timeRow.add(hhSpinner);
-                timeRow.add(minSpinner);
-                amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
-                amPmSelector.setSelectedItem("AM");
-                timeRow.add(amPmSelector);
+// Add button to update date to current date
+        JButton updateDateBtn = new JButton("Update to Current Date");
+        updateDateBtn.addActionListener(e -> {
+            LocalDate currentDate = LocalDate.now();
+            mmSpinner.setValue(currentDate.getMonthValue());
+            ddSpinner.setValue(currentDate.getDayOfMonth());
+            yyyySpinner.setValue(currentDate.getYear());
+        });
+        dateRow.add(updateDateBtn);
+
+// time
+        timeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        timeRow.setBorder(BorderFactory.createTitledBorder("Time of Conversion"));
+        timeRow.setMaximumSize(basicRowMaxSize);
+
+        try {
+            SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
+            hhSpinner = new JSpinner(hhModel);
+            if (conversion.timeOfConversion.hour != null)
+                hhSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getHour()));
+            SpinnerNumberModel minModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getMinute()), 0, 59, 1);
+            minSpinner = new JSpinner(minModel);
+
+            // * DEBUG
+            if (conversion.timeOfConversion.minute != null) {
+                System.out.println("Initial minute value: " + conversion.timeOfConversion.getMinute());
+                minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
             }
-            amPmSelector.setPreferredSize(new Dimension(50, 20));
+
+            JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
+            minSpinner.setEditor(editor);
+            if (conversion.timeOfConversion.minute != null)
+                minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
+            timeRow.add(hhSpinner);
+            timeRow.add(minSpinner);
+            amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
+            if (conversion.timeOfConversion.getAmPm() != null)
+                amPmSelector.setSelectedItem(conversion.timeOfConversion.getAmPm());
+            timeRow.add(amPmSelector);
+        } catch (NumberFormatException e) {
+            SpinnerNumberModel hhModel = new SpinnerNumberModel(12, 1, 12, 1);
+            hhSpinner = new JSpinner(hhModel);
+            SpinnerNumberModel minModel = new SpinnerNumberModel(0, 0, 59, 1);
+            minSpinner = new JSpinner(minModel);
+            JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
+            minSpinner.setEditor(editor);
+            timeRow.add(hhSpinner);
+            timeRow.add(minSpinner);
+            amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
+            amPmSelector.setSelectedItem("AM");
+            timeRow.add(amPmSelector);
+        }
+        amPmSelector.setPreferredSize(new Dimension(50, 20));
+
+// Add button to update time to current time
+        JButton updateTimeBtn = new JButton("Update to Current Time");
+        updateTimeBtn.addActionListener(e -> {
+            LocalTime currentTime = LocalTime.now();
+            int hour = currentTime.getHour();
+            int minute = currentTime.getMinute();
+            String amPm = hour >= 12 ? "PM" : "AM";
+            hour = hour % 12;
+            if (hour == 0) hour = 12;
+            hhSpinner.setValue(hour);
+            minSpinner.setValue(minute);
+            amPmSelector.setSelectedItem(amPm);
+
+            // * DEBUG
+            System.out.println("Current minute value: " + minute);
+        });
+        timeRow.add(updateTimeBtn);
 
         // tape duration
         tapeDurationRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -297,6 +352,10 @@ public class ConversionPanel extends JPanel {
             conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
             conversion.duration = Duration.ofMinutes((Integer) tapeDurationSpinner.getValue());
 
+            // * DEBUG
+            conversion.timeOfConversion.minute = minSpinner.getValue().toString();
+            System.out.println("Saved minute value: " + conversion.timeOfConversion.minute);
+
             // save the project (serialize it)
             projectFrame.saveProject();
         });
@@ -314,11 +373,25 @@ public class ConversionPanel extends JPanel {
         add(typeRow);
         add(noteRow);
         add(filesPanel);
+        add(filenamePanel);
         add(statusRow);
         add(dateRow);
         add(timeRow);
         add(tapeDurationRow);
         add(buttonRow);
+    }
+
+    private void updateLinkedFiles(){
+        DefaultListModel<File> listModel = new DefaultListModel<>();
+        if(conversion.linkedFiles != null) {
+            for (File f : conversion.linkedFiles) {
+                listModel.addElement(f);
+            }
+        } else {
+            listModel.addElement(new File("No files attached"));
+        }
+        filesList.setModel(listModel);
+        filesPanel.add(filesList);
     }
 
     private void setupDateTimeSpinners(){

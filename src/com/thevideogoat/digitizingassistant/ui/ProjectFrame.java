@@ -2,6 +2,7 @@ package com.thevideogoat.digitizingassistant.ui;
 
 import com.thevideogoat.digitizingassistant.data.Conversion;
 import com.thevideogoat.digitizingassistant.data.Project;
+import com.thevideogoat.digitizingassistant.data.Util;
 
 import javax.swing.*;
 import java.awt.*;
@@ -68,6 +69,16 @@ public class ProjectFrame extends JFrame {
         for(Conversion conversion : project.getConversions()){
             addConversionToSidebar(conversion);
         }
+
+        JButton renameAllFilesBtn = new JButton("Rename All Linked Files");
+        renameAllFilesBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        renameAllFilesBtn.addActionListener(e -> {
+            for (Conversion conversion : project.getConversions()) {
+                Util.renameLinkedFiles(conversion);
+            }
+            saveProject();
+        });
+        sidebar.add(renameAllFilesBtn);
 
         // temporary message panel
         JPanel tempContentPanel = new JPanel(new GridBagLayout());
