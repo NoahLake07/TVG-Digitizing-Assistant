@@ -14,7 +14,6 @@ import java.io.File;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.Objects;
 
 import static java.util.Objects.requireNonNullElse;
 
@@ -98,90 +97,90 @@ public class ConversionPanel extends JPanel {
         filesPanel.setLayout(new BoxLayout(filesPanel, BoxLayout.Y_AXIS));
         filesPanel.setBorder(BorderFactory.createTitledBorder("Linked Files"));
         filesPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 150));
-            filesList = new JList<>();
-            filesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-            filesList.setLayoutOrientation(JList.VERTICAL);
-            filesList.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
-            DefaultListModel<File> listModel = new DefaultListModel<>();
-            if(conversion.linkedFiles != null) {
-                for (File f : conversion.linkedFiles) {
-                    listModel.addElement(f);
-                }
-            } else {
-                listModel.addElement(new File("No files attached"));
+        filesList = new JList<>();
+        filesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        filesList.setLayoutOrientation(JList.VERTICAL);
+        filesList.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
+        DefaultListModel<File> listModel = new DefaultListModel<>();
+        if(conversion.linkedFiles != null) {
+            for (File f : conversion.linkedFiles) {
+                listModel.addElement(f);
             }
-            filesList.setModel(listModel);
-            filesPanel.add(filesList);
+        } else {
+            listModel.addElement(new File("No files attached"));
+        }
+        filesList.setModel(listModel);
+        filesPanel.add(filesList);
 
-            JPanel filesButtonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-                addFileBtn = new JButton("Attach File");
-                addFileBtn.addActionListener(e -> {
-                    // open a file chooser dialog
-                    JFileChooser fileChooser = new JFileChooser();
-                    fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                    fileChooser.setMultiSelectionEnabled(true);
-                    int result = fileChooser.showOpenDialog(this);
-                    if(result == JFileChooser.APPROVE_OPTION){
-                        for(File f : fileChooser.getSelectedFiles()){
-                            listModel.addElement(f);
-                            conversion.linkedFiles.add(f);
-                        }
-                    }
-                });
-            filesButtonRow.add(addFileBtn);
-            filesPanel.add(filesButtonRow);
+        JPanel filesButtonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        addFileBtn = new JButton("Attach File");
+        addFileBtn.addActionListener(e -> {
+            // open a file chooser dialog
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            fileChooser.setMultiSelectionEnabled(true);
+            int result = fileChooser.showOpenDialog(this);
+            if(result == JFileChooser.APPROVE_OPTION){
+                for(File f : fileChooser.getSelectedFiles()){
+                    listModel.addElement(f);
+                    conversion.linkedFiles.add(f);
+                }
+            }
+        });
+        filesButtonRow.add(addFileBtn);
+        filesPanel.add(filesButtonRow);
 
-            // Create a popup menu
-            JPopupMenu popupMenu = new JPopupMenu();
-            JMenuItem openMenuItem = new JMenuItem("Open File");
-            JMenuItem openFileLocationItem = new JMenuItem("Open File Location");
-            JMenuItem renameFile = new JMenuItem("Auto Rename");
-            JMenuItem removeMenuItem = new JMenuItem("Remove");
-            openMenuItem.addActionListener(e -> {
-                int selectedIndex = filesList.getSelectedIndex();
-                if (selectedIndex != -1) {
-                    File selectedFile = listModel.getElementAt(selectedIndex);
-                    try {
-                        Desktop.getDesktop().open(selectedFile);
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(null, "Failed to open the file.", "Error", JOptionPane.ERROR_MESSAGE);
-                    }
+        // Create a popup menu
+        JPopupMenu popupMenu = new JPopupMenu();
+        JMenuItem openMenuItem = new JMenuItem("Open File");
+        JMenuItem openFileLocationItem = new JMenuItem("Open File Location");
+        JMenuItem renameFile = new JMenuItem("Auto Rename");
+        JMenuItem removeMenuItem = new JMenuItem("Remove");
+        openMenuItem.addActionListener(e -> {
+            int selectedIndex = filesList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                File selectedFile = listModel.getElementAt(selectedIndex);
+                try {
+                    Desktop.getDesktop().open(selectedFile);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(null, "Failed to open the file.", "Error", JOptionPane.ERROR_MESSAGE);
                 }
-            });
-            openFileLocationItem.addActionListener(e -> {
-                int selectedIndex = filesList.getSelectedIndex();
-                if (selectedIndex != -1) {
-                    File selectedFile = listModel.getElementAt(selectedIndex);
-                    try {
-                        Desktop.getDesktop().open(selectedFile.getParentFile());
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(null, "Failed to open the file location.", "Error", JOptionPane.ERROR_MESSAGE);
-                    }
+            }
+        });
+        openFileLocationItem.addActionListener(e -> {
+            int selectedIndex = filesList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                File selectedFile = listModel.getElementAt(selectedIndex);
+                try {
+                    Desktop.getDesktop().open(selectedFile.getParentFile());
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(null, "Failed to open the file location.", "Error", JOptionPane.ERROR_MESSAGE);
                 }
-            });
-            renameFile.addActionListener(e -> {
-                Util.renameFile(listModel.getElementAt(filesList.getSelectedIndex()), conversion.name);
-                updateLinkedFiles();
-            });
-            removeMenuItem.addActionListener(e -> {
-                int selectedIndex = filesList.getSelectedIndex();
-                if (selectedIndex != -1) {
-                    listModel.remove(selectedIndex);
-                    conversion.linkedFiles.remove(selectedIndex);
-                }
-            });
-            popupMenu.add(openMenuItem);
-            popupMenu.add(openFileLocationItem);
-            popupMenu.add(removeMenuItem);
+            }
+        });
+        renameFile.addActionListener(e -> {
+            Util.renameFile(listModel.getElementAt(filesList.getSelectedIndex()), conversion.name);
+            updateLinkedFiles();
+        });
+        removeMenuItem.addActionListener(e -> {
+            int selectedIndex = filesList.getSelectedIndex();
+            if (selectedIndex != -1) {
+                listModel.remove(selectedIndex);
+                conversion.linkedFiles.remove(selectedIndex);
+            }
+        });
+        popupMenu.add(openMenuItem);
+        popupMenu.add(openFileLocationItem);
+        popupMenu.add(removeMenuItem);
 
-            // Add a mouse listener to the list
-            filesList.addMouseListener(new MouseAdapter()    {
-                public void mousePressed(MouseEvent me) {
-                    if (SwingUtilities.isRightMouseButton(me) && !filesList.isSelectionEmpty() && filesList.locationToIndex(me.getPoint()) == filesList.getSelectedIndex()) {
-                        popupMenu.show(filesList, me.getX(), me.getY());
-                    }
+        // Add a mouse listener to the list
+        filesList.addMouseListener(new MouseAdapter()    {
+            public void mousePressed(MouseEvent me) {
+                if (SwingUtilities.isRightMouseButton(me) && !filesList.isSelectionEmpty() && filesList.locationToIndex(me.getPoint()) == filesList.getSelectedIndex()) {
+                    popupMenu.show(filesList, me.getX(), me.getY());
                 }
-            });
+            }
+        });
 
         // filename panel
         filenamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -205,7 +204,7 @@ public class ConversionPanel extends JPanel {
         dateRow.add(ddSpinner);
         dateRow.add(yyyySpinner);
 
-// Add button to update date to current date
+        // Add button to update date to current date
         JButton updateDateBtn = new JButton("Update to Current Date");
         updateDateBtn.addActionListener(e -> {
             LocalDate currentDate = LocalDate.now();
@@ -215,7 +214,7 @@ public class ConversionPanel extends JPanel {
         });
         dateRow.add(updateDateBtn);
 
-// time
+        // time
         timeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         timeRow.setBorder(BorderFactory.createTitledBorder("Time of Conversion"));
         timeRow.setMaximumSize(basicRowMaxSize);
@@ -227,12 +226,6 @@ public class ConversionPanel extends JPanel {
                 hhSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getHour()));
             SpinnerNumberModel minModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getMinute()), 0, 59, 1);
             minSpinner = new JSpinner(minModel);
-
-            // * DEBUG
-            if (conversion.timeOfConversion.minute != null) {
-                System.out.println("Initial minute value: " + conversion.timeOfConversion.getMinute());
-                minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
-            }
 
             JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
             minSpinner.setEditor(editor);
@@ -259,7 +252,7 @@ public class ConversionPanel extends JPanel {
         }
         amPmSelector.setPreferredSize(new Dimension(50, 20));
 
-// Add button to update time to current time
+        // Add button to update time to current time
         JButton updateTimeBtn = new JButton("Update to Current Time");
         updateTimeBtn.addActionListener(e -> {
             LocalTime currentTime = LocalTime.now();
@@ -271,9 +264,6 @@ public class ConversionPanel extends JPanel {
             hhSpinner.setValue(hour);
             minSpinner.setValue(minute);
             amPmSelector.setSelectedItem(amPm);
-
-            // * DEBUG
-            System.out.println("Current minute value: " + minute);
         });
         timeRow.add(updateTimeBtn);
 
@@ -295,27 +285,25 @@ public class ConversionPanel extends JPanel {
         Dimension prefSize = new Dimension(150,20);
         statusSelector.setPreferredSize(prefSize);
 
-            StatusIndicator statusIndicator = new StatusIndicator();
-            statusSelector.addActionListener(e -> {
-                ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
-                statusIndicator.updateColor(selectedStatus);
-                if(selectedStatus == ConversionStatus.COMPLETED || selectedStatus == ConversionStatus.BASIC_EDITING){
-                    tapeDurationRow.setVisible(true);
-                } else {
-                    tapeDurationRow.setVisible(false);
-                }
-                if(selectedStatus == ConversionStatus.NOT_STARTED){
-                    dateRow.setVisible(false);
-                    timeRow.setVisible(false);
-                } else {
-                    dateRow.setVisible(true);
-                    timeRow.setVisible(true);
-                    if(selectedStatus == ConversionStatus.IN_PROGRESS){
-                        setupDateTimeSpinners();
-                    }
-                }
-                statusSelector.setPreferredSize(prefSize);
-            });
+        StatusIndicator statusIndicator = new StatusIndicator();
+        statusSelector.addActionListener(e -> {
+            ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
+            statusIndicator.updateColor(selectedStatus);
+            if(selectedStatus == ConversionStatus.COMPLETED || selectedStatus == ConversionStatus.BASIC_EDITING){
+                tapeDurationRow.setVisible(true);
+            } else {
+                tapeDurationRow.setVisible(false);
+            }
+            if(selectedStatus == ConversionStatus.NOT_STARTED){
+                dateRow.setVisible(false);
+                timeRow.setVisible(false);
+            } else {
+                dateRow.setVisible(true);
+                timeRow.setVisible(true);
+                // Removed call to setupDateTimeSpinners()
+            }
+            statusSelector.setPreferredSize(prefSize);
+        });
         statusRow.add(statusIndicator);
         statusRow.add(statusSelector);
 
@@ -347,14 +335,10 @@ public class ConversionPanel extends JPanel {
             conversion.dateOfConversion.day = ddSpinner.getValue().toString();
             conversion.dateOfConversion.year = yyyySpinner.getValue().toString();
             conversion.timeOfConversion.hour = hhSpinner.getValue().toString();
-            conversion.timeOfConversion.minute = mmSpinner.getValue().toString();
+            conversion.timeOfConversion.minute = minSpinner.getValue().toString();
             conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
             conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
             conversion.duration = Duration.ofMinutes((Integer) tapeDurationSpinner.getValue());
-
-            // * DEBUG
-            conversion.timeOfConversion.minute = minSpinner.getValue().toString();
-            System.out.println("Saved minute value: " + conversion.timeOfConversion.minute);
 
             // save the project (serialize it)
             projectFrame.saveProject();
@@ -395,21 +379,48 @@ public class ConversionPanel extends JPanel {
     }
 
     private void setupDateTimeSpinners(){
-        SpinnerNumberModel mmModel, ddModel, yyyyModel;
         try {
-            mmModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getMonth()), 1, 12, 1);
-            mmSpinner = new JSpinner(mmModel);
-            ddModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getDay()), 1, 31, 1);
-            ddSpinner = new JSpinner(ddModel);
-            yyyyModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getYear()), 1900, 2100, 1);
-            yyyySpinner = new JSpinner(yyyyModel);
+            // Month Spinner
+            if(mmSpinner == null) {
+                SpinnerNumberModel mmModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getMonth()), 1, 12, 1);
+                mmSpinner = new JSpinner(mmModel);
+            } else {
+                mmSpinner.setValue(Integer.parseInt(conversion.dateOfConversion.getMonth()));
+            }
+            // Day Spinner
+            if(ddSpinner == null) {
+                SpinnerNumberModel ddModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getDay()), 1, 31, 1);
+                ddSpinner = new JSpinner(ddModel);
+            } else {
+                ddSpinner.setValue(Integer.parseInt(conversion.dateOfConversion.getDay()));
+            }
+            // Year Spinner
+            if(yyyySpinner == null) {
+                SpinnerNumberModel yyyyModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getYear()), 1900, 2100, 1);
+                yyyySpinner = new JSpinner(yyyyModel);
+            } else {
+                yyyySpinner.setValue(Integer.parseInt(conversion.dateOfConversion.getYear()));
+            }
         } catch (NumberFormatException e) {
-            mmModel = new SpinnerNumberModel(1, 1, 12, 1);
-            mmSpinner = new JSpinner(mmModel);
-            ddModel = new SpinnerNumberModel(1, 1, 31, 1);
-            ddSpinner = new JSpinner(ddModel);
-            yyyyModel = new SpinnerNumberModel(2000, 1900, 2100, 1);
-            yyyySpinner = new JSpinner(yyyyModel);
+            // Handle exceptions appropriately
+            if(mmSpinner == null) {
+                SpinnerNumberModel mmModel = new SpinnerNumberModel(1, 1, 12, 1);
+                mmSpinner = new JSpinner(mmModel);
+            } else {
+                mmSpinner.setValue(1);
+            }
+            if(ddSpinner == null) {
+                SpinnerNumberModel ddModel = new SpinnerNumberModel(1, 1, 31, 1);
+                ddSpinner = new JSpinner(ddModel);
+            } else {
+                ddSpinner.setValue(1);
+            }
+            if(yyyySpinner == null) {
+                SpinnerNumberModel yyyyModel = new SpinnerNumberModel(2000, 1900, 2100, 1);
+                yyyySpinner = new JSpinner(yyyyModel);
+            } else {
+                yyyySpinner.setValue(2000);
+            }
         }
     }
 
@@ -424,6 +435,9 @@ public class ConversionPanel extends JPanel {
             switch (status) {
                 case NOT_STARTED:
                     setBackground(new Color(59, 59, 59));
+                    break;
+                case DAMAGED:
+                    setBackground(new Color(204, 25, 25));
                     break;
                 case IN_PROGRESS:
                     setBackground(new Color(255, 165, 0));

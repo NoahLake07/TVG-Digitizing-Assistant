@@ -188,6 +188,7 @@ public class DigitizingAssistant {
 
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            System.setProperty("sun.java2d.uiScale", "1.0");
         } catch (Exception e) {
             throw new Error("Could not set system look and feel.");
         }

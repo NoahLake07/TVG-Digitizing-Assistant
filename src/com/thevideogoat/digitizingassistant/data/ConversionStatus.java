@@ -5,6 +5,7 @@ import java.io.Serializable;
 public enum ConversionStatus implements Serializable {
 
     NOT_STARTED("Not Started"),
+    DAMAGED("Damaged"),
     IN_PROGRESS("In Progress"),
     BASIC_EDITING("Basic Editing"),
     COMPLETED("Completed"),
@@ -21,11 +22,12 @@ public enum ConversionStatus implements Serializable {
     }
 
     public ConversionStatus[] getValues(){
-        ConversionStatus[] x = new ConversionStatus[4];
+        ConversionStatus[] x = new ConversionStatus[5];
         x[0] = NOT_STARTED;
-        x[1] = IN_PROGRESS;
-        x[2] = BASIC_EDITING;
-        x[3] = COMPLETED;
+        x[2] = IN_PROGRESS;
+        x[3] = BASIC_EDITING;
+        x[4] = COMPLETED;
+        x[1] = NOT_STARTED;
         return x;
     }
 }

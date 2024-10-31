@@ -2,6 +2,7 @@ package com.thevideogoat.digitizingassistant.data;
 
 import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
 
+import java.awt.*;
 import java.io.*;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -39,6 +40,23 @@ public class Conversion implements Serializable {
         ois.defaultReadObject();
         if (status == null) {
             status = ConversionStatus.NOT_STARTED;
+        }
+    }
+
+    public Color getStatusColor() {
+        switch (status) {
+            case NOT_STARTED:
+                return Color.DARK_GRAY;
+            case DAMAGED:
+                return Color.RED;
+            case IN_PROGRESS:
+                return Color.ORANGE;
+            case BASIC_EDITING:
+                return Color.BLUE;
+            case COMPLETED:
+                return Color.GREEN;
+            default:
+                return Color.BLACK;
         }
     }
 
