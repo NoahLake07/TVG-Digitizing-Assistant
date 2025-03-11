@@ -1,5 +1,7 @@
 package com.thevideogoat.digitizingassistant.data;
 
+import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
+
 import javax.swing.*;
 import java.io.File;
 import java.util.ArrayList;
@@ -20,6 +22,10 @@ public class Util {
 
     public static boolean deleteFile(File file){
         return file.delete();
+    }
+
+    public static String getProjectQueuePath(Project project){
+        return DigitizingAssistant.PROJECTS_DIRECTORY + File.separator + project.getName() +".queue";
     }
 
     public static void renameLinkedFiles(Conversion c){
@@ -113,5 +119,28 @@ public class Util {
         }
 
         return conversions;
+    }
+
+    public static boolean isVideoFile(File file){
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".mp4") || name.endsWith(".avi") || name.endsWith(".mov") || name.endsWith(".mkv") || name.endsWith(".flv") || name.endsWith(".wmv");
+    }
+
+    public static ArrayList<File> getLinkedFiles(Project p){
+        ArrayList<File> linkedFiles = new ArrayList<>();
+        for (Conversion conversion : p.conversions) {
+            linkedFiles.addAll(conversion.linkedFiles);
+        }
+        return linkedFiles;
+    }
+
+    public static ArrayList<File> getVideoFiles(Project p){
+        ArrayList<File> videoFiles = new ArrayList<>();
+        for (File file : getLinkedFiles(p)) {
+            if (Util.isVideoFile(file)) {
+                videoFiles.add(file);
+            }
+        }
+        return videoFiles;
     }
 }

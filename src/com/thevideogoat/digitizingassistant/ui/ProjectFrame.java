@@ -10,7 +10,10 @@ import java.util.ArrayList;
 
 public class ProjectFrame extends JFrame {
 
-    JPanel sidebar, conversionListPanel;
+    JPanel sidebar, conversionListPanel, detailsPanel;
+    JTabbedPane tabbedPane;
+    transient EditorPanel editorPanel;
+
     JScrollPane conversionScrollPane;
     JSplitPane splitPane;
     Project project;
@@ -27,9 +30,18 @@ public class ProjectFrame extends JFrame {
         setVisible(true);
     }
 
-    private void setupUI(){
+    private void setupUI() {
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
         splitPane.setDividerLocation(200);
+
+        tabbedPane = new JTabbedPane();
+
+        // Initialize detailsPanel
+        detailsPanel = new JPanel();
+        detailsPanel.setLayout(new BorderLayout());
+
+        tabbedPane.addTab("Details", detailsPanel);
+        tabbedPane.addTab("Editor", new EditorPanel(project));
 
         // sidebar
         sidebar = new JPanel();
@@ -39,47 +51,16 @@ public class ProjectFrame extends JFrame {
         // search bar
         searchField = new JTextField();
         searchField.setBorder(BorderFactory.createTitledBorder("Search"));
-        searchField.setMaximumSize(new Dimension(Short.MAX_VALUE, 30));
+        searchField.setMaximumSize(new Dimension(Short.MAX_VALUE, 50));
         searchField.addCaretListener(e -> {
             String search = searchField.getText();
-            if(!search.isEmpty()) {
-                for (Component c : conversionListPanel.getComponents()) {
-                    if (c instanceof JButton) {
-                        JButton btn = (JButton) c;
-                        if (btn.getText().toLowerCase().contains(search.toLowerCase())) {
-                            btn.setVisible(true);
-                        } else {
-                            btn.setVisible(false);
-                        }
-                    }
-                }
-            } else {
-                for (Component c : conversionListPanel.getComponents()) {
-                    if (c instanceof JButton) {
-                        c.setVisible(true);
-                    }
-                }
-            }
-            conversionListPanel.revalidate();
-            conversionListPanel.repaint();
-        });
-        searchField.addActionListener(e -> {
-            String search = searchField.getText();
-            if(!search.isEmpty()) {
-                for (Component c : conversionListPanel.getComponents()) {
-                    if (c instanceof JButton) {
-                        JButton btn = (JButton) c;
-                        if (btn.getText().toLowerCase().contains(search.toLowerCase())) {
-                            btn.setVisible(true);
-                        } else {
-                            btn.setVisible(false);
-                        }
-                    }
-                }
-            } else {
-                for (Component c : conversionListPanel.getComponents()) {
-                    if (c instanceof JButton) {
-                        c.setVisible(true);
+            for (Component c : conversionListPanel.getComponents()) {
+                if (c instanceof JButton) {
+                    JButton btn = (JButton) c;
+                    if (btn.getText().toLowerCase().contains(search.toLowerCase())) {
+                        btn.setVisible(true);
+                    } else {
+                        btn.setVisible(false);
                     }
                 }
             }
@@ -93,18 +74,19 @@ public class ProjectFrame extends JFrame {
         sortBy.addItem("Name");
         sortBy.addItem("Status");
         sortBy.setBorder(BorderFactory.createTitledBorder("Sort By"));
-        sortBy.addActionListener(l->{
+        sortBy.setMaximumSize(new Dimension(Short.MAX_VALUE, 50));
+        sortBy.addActionListener(l -> {
             conversionListPanel.removeAll();
-                ArrayList<Conversion> sortedConversions = Util.sortConversionsBy(project.getConversions(), sortBy.getSelectedItem().toString().toLowerCase());
-                for(Conversion c : sortedConversions){
-                    addConversionToSidebar(c);
-                }
+            ArrayList<Conversion> sortedConversions = Util.sortConversionsBy(project.getConversions(), sortBy.getSelectedItem().toString().toLowerCase());
+            for (Conversion c : sortedConversions) {
+                addConversionToSidebar(c);
+            }
         });
         sidebar.add(sortBy);
 
         // conversion list (sidebar)
         conversionListPanel = new JPanel();
-        conversionListPanel.setLayout(new BoxLayout(conversionListPanel, BoxLayout.Y_AXIS)); // Use BoxLayout for reordering
+        conversionListPanel.setLayout(new BoxLayout(conversionListPanel, BoxLayout.Y_AXIS));
         conversionScrollPane = new JScrollPane(conversionListPanel);
         conversionScrollPane.setBorder(BorderFactory.createTitledBorder("Conversions"));
         conversionScrollPane.setMaximumSize(new Dimension(Short.MAX_VALUE, 315));
@@ -118,13 +100,18 @@ public class ProjectFrame extends JFrame {
 
         JMenuItem newConversionItem = new JMenuItem("New Conversion");
         newConversionItem.addActionListener(e -> {
-            // create a new conversion
             String conversionName = JOptionPane.showInputDialog("Conversion Name:");
-            if(conversionName != null){
+            if (conversionName != null) {
                 Conversion c = new Conversion(conversionName);
                 addConversionToSidebar(c);
                 project.addConversion(c);
-                splitPane.setRightComponent(new ConversionPanel(c,this));
+
+                // Update detailsPanel content
+                detailsPanel.removeAll();
+                detailsPanel.add(new ConversionPanel(c, this), BorderLayout.CENTER);
+                detailsPanel.revalidate();
+                detailsPanel.repaint();
+                tabbedPane.setSelectedComponent(detailsPanel);
             }
             saveProject();
         });
@@ -132,13 +119,18 @@ public class ProjectFrame extends JFrame {
 
         JButton newConversion = new JButton("New Conversion");
         newConversion.addActionListener(e -> {
-            // create a new conversion
             String conversionName = JOptionPane.showInputDialog("Conversion Name:");
-            if(conversionName != null){
+            if (conversionName != null) {
                 Conversion c = new Conversion(conversionName);
                 addConversionToSidebar(c);
                 project.addConversion(c);
-                splitPane.setRightComponent(new ConversionPanel(c,this));
+
+                // Update detailsPanel content
+                detailsPanel.removeAll();
+                detailsPanel.add(new ConversionPanel(c, this), BorderLayout.CENTER);
+                detailsPanel.revalidate();
+                detailsPanel.repaint();
+                tabbedPane.setSelectedComponent(detailsPanel);
             }
             saveProject();
         });
@@ -160,6 +152,12 @@ public class ProjectFrame extends JFrame {
         });
         projectMenu.add(relinkFilesItem);
 
+        JMenuItem openTrimWindow = new JMenuItem("Open File Trim Tool");
+        openTrimWindow.addActionListener(e -> {
+            new TrimWindow(project);
+        });
+        projectMenu.add(openTrimWindow);
+
         JMenuItem exitProjectItem = new JMenuItem("Exit Project");
         exitProjectItem.addActionListener(e -> {
             saveProject();
@@ -171,37 +169,26 @@ public class ProjectFrame extends JFrame {
         menuBar.add(projectMenu);
         setJMenuBar(menuBar);
 
-        for(Conversion conversion : project.getConversions()){
+        for (Conversion conversion : project.getConversions()) {
             addConversionToSidebar(conversion);
         }
 
-        // temporary message panel
-        JPanel tempContentPanel = new JPanel(new GridBagLayout());
-        JLabel message = new JLabel("Select a conversion from the sidebar to view details.");
-        message.setFont(new Font("Arial", Font.BOLD, 13));
-        tempContentPanel.add(message);
-
         splitPane.setLeftComponent(sidebar);
-        splitPane.setRightComponent(tempContentPanel);
+        splitPane.setRightComponent(tabbedPane);
         add(splitPane);
     }
 
-    private void displayTempContentPanel(){
-        // temporary message panel
-        JPanel tempContentPanel = new JPanel(new GridBagLayout());
-        JLabel message = new JLabel("Select a conversion from the sidebar to view details.");
-        message.setFont(new Font("Arial", Font.BOLD, 13));
-        tempContentPanel.add(message);
-        splitPane.setRightComponent(tempContentPanel);
-    }
-
-    private void addConversionToSidebar(Conversion conversion){
+    private void addConversionToSidebar(Conversion conversion) {
         JButton conversionBtn = new JButton(conversion.name);
         conversionBtn.setMaximumSize(new Dimension(Integer.MAX_VALUE, conversionBtn.getPreferredSize().height));
         conversionBtn.setForeground(conversion.getStatusColor());
         conversionBtn.addActionListener(e -> {
-            // show the conversion panel
-            splitPane.setRightComponent(new ConversionPanel(conversion, this));
+            // Update detailsPanel content
+            detailsPanel.removeAll();
+            detailsPanel.add(new ConversionPanel(conversion, this), BorderLayout.CENTER);
+            detailsPanel.revalidate();
+            detailsPanel.repaint();
+            tabbedPane.setSelectedComponent(detailsPanel);
         });
 
         conversionListPanel.add(conversionBtn);
@@ -222,11 +209,11 @@ public class ProjectFrame extends JFrame {
         }
     }
 
-    public void remove(ConversionPanel conversion){
-        for(Component c : conversionListPanel.getComponents()){
-            if(c instanceof JButton){
+    public void remove(ConversionPanel conversionPanel) {
+        for (Component c : conversionListPanel.getComponents()) {
+            if (c instanceof JButton) {
                 JButton btn = (JButton) c;
-                if(btn.getText().equals(conversion.conversion.name)){
+                if (btn.getText().equals(conversionPanel.conversion.name)) {
                     conversionListPanel.remove(btn);
                     conversionListPanel.revalidate();
                     conversionListPanel.repaint();
@@ -235,18 +222,27 @@ public class ProjectFrame extends JFrame {
             }
         }
 
-        for(Conversion c : project.getConversions()){
-            if(c.name.equals(conversion.conversion.name)){
-                project.getConversions().remove(c);
-            }
-        }
+        project.getConversions().removeIf(c -> c.name.equals(conversionPanel.conversion.name));
+
+        // Clear detailsPanel content
+        detailsPanel.removeAll();
+        detailsPanel.revalidate();
+        detailsPanel.repaint();
         displayTempContentPanel();
         saveProject();
+    }
+
+    private void displayTempContentPanel() {
+        detailsPanel.removeAll();
+        JLabel message = new JLabel("Select a conversion from the sidebar to view details.");
+        message.setFont(new Font("Arial", Font.BOLD, 13));
+        detailsPanel.add(message, BorderLayout.CENTER);
+        detailsPanel.revalidate();
+        detailsPanel.repaint();
     }
 
     public void saveProject() {
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
         updateButtonColors();
     }
-
 }

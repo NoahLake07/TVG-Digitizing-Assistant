@@ -31,7 +31,6 @@ public class ConversionPanel extends JPanel {
     JTextField noteField;
     JSpinner mmSpinner, ddSpinner, yyyySpinner, hhSpinner, minSpinner, tapeDurationSpinner;
 
-
     JButton addFileBtn, saveBtn;
 
     public ConversionPanel(Conversion conversion, ProjectFrame projectFrame){
