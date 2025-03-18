@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class TaskQueue implements Serializable {
 
@@ -43,7 +45,8 @@ public class TaskQueue implements Serializable {
     }
 
     /**
-     * Exports all tasks concurrently, while displaying a modal progress dialog that updates live.
+     * Exports all tasks concurrently using the new TS‑based export method.
+     * Displays a modal progress dialog that aggregates each task's progress.
      */
     public void exportAll() {
         if (tasks.isEmpty()) {
@@ -51,14 +54,19 @@ public class TaskQueue implements Serializable {
             return;
         }
 
-        // Total number of export tasks to process.
         final int totalTasks = tasks.size();
-        final AtomicInteger completedCount = new AtomicInteger(0);
         inProgress = true;
+
+        // This map will hold progress for each task (0.0 to 1.0).
+        final Map<ExportTask, Double> taskProgress = new ConcurrentHashMap<>();
+        // Initialize each task's progress to 0.0.
+        for (ExportTask task : tasks) {
+            taskProgress.put(task, 0.0);
+        }
 
         // Create and configure a progress dialog with a JProgressBar.
         JDialog progressDialog = new JDialog((Frame) null, "Export Progress", true);
-        JProgressBar progressBar = new JProgressBar(0, totalTasks);
+        JProgressBar progressBar = new JProgressBar(0, 100); // 0 to 100%
         progressBar.setStringPainted(true);
         progressBar.setValue(0);
         progressDialog.getContentPane().add(progressBar, BorderLayout.CENTER);
@@ -73,21 +81,27 @@ public class TaskQueue implements Serializable {
         // Use a CountDownLatch to know when all tasks have finished.
         CountDownLatch latch = new CountDownLatch(totalTasks);
 
-        // For each task, submit a Runnable that performs the export and then updates the progress.
+        // For each task, submit a Runnable that runs exportUsingTS and updates progress.
         for (ExportTask task : tasks) {
             executor.submit(() -> {
-                // Run the export logic (this call is blocking until the export is complete)
-                task.export(exportLoc);
+                // Each task is given its own ProgressListener that updates the shared taskProgress map.
+                ExportTask.ProgressListener listener = progress -> {
+                    taskProgress.put(task, progress);
+                    // Calculate overall progress as the average of all task progress values.
+                    double overall = taskProgress.values().stream().mapToDouble(Double::doubleValue).sum() / totalTasks;
+                    // Update progress bar on the EDT.
+                    SwingUtilities.invokeLater(() -> progressBar.setValue((int) (overall * 100)));
+                };
 
-                // Update our count of completed tasks
-                int count = completedCount.incrementAndGet();
-                // Update the progress bar on the EDT.
-                SwingUtilities.invokeLater(() -> progressBar.setValue(count));
+                // Run the exportUsingTS method (this call blocks until export is complete).
+                task.export(exportLoc, listener);
+                // Mark this task as complete.
+                taskProgress.put(task, 1.0);
                 latch.countDown();
             });
         }
 
-        // Start a thread to wait for all exports to complete. Once done, dispose of the progress dialog.
+        // Start a thread to wait for all exports to complete.
         new Thread(() -> {
             try {
                 latch.await();
@@ -107,27 +121,23 @@ public class TaskQueue implements Serializable {
 
         // Clear the task list since they've been processed.
         tasks.clear();
-        // Optionally update the completedTasks counter if needed elsewhere.
         completedTasks += totalTasks;
     }
 
     public String toString(){
-        StringBuffer sb = new StringBuffer();
-
+        StringBuilder sb = new StringBuilder();
         sb.append("Task Queue:\n");
         for(ExportTask task : tasks){
-            sb.append("\t" + task.toString() + "\n");
+            sb.append("\t").append(task.toString()).append("\n");
         }
         return sb.toString();
     }
 
     /**
-     * Returns the overall progress as a fraction. (This implementation is simple
-     * because the live progress is shown in the dialog; you might add more fine-grained
-     * tracking if you wish.)
+     * Returns the overall progress as a fraction.
+     * (This method can be adapted if you maintain per-task progress info.)
      */
     public double getProgress() {
-        // This method can be adapted if you maintain per-task progress info.
         if (tasks.isEmpty()) {
             return 1.0;
         }

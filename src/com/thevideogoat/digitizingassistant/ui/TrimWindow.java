@@ -333,10 +333,11 @@ public class TrimWindow extends JFrame {
                 chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
                 if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                     File exportLoc = chooser.getSelectedFile();
-                    trimmer.getTask(linkedConversion).export(exportLoc.toPath());
+                    trimmer.getTask(linkedConversion).export(exportLoc.toPath(),null); // ! MAKE PROG. LIST. NOT NULL WHEN RE-ENABLING EXPORT NOW
                 }
             });
             actionBar.add(exportNow);
+            exportNow.setEnabled(false); // TEMP UNTIL FIXED PROG. LIST. PARAM
             add(actionBar);
             // endregion
         }

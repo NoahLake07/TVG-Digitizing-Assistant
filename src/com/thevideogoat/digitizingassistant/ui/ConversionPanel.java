@@ -53,7 +53,7 @@ public class ConversionPanel extends JPanel {
         headerRow.add(header);
         add(headerRow);
 
-        // rename conversion
+        // rename conversion to conversion name
         JPopupMenu renameMenu = new JPopupMenu();
         JMenuItem renameMenuItem = new JMenuItem("Rename");
         renameMenuItem.addActionListener(e -> {
@@ -71,6 +71,8 @@ public class ConversionPanel extends JPanel {
                 }
             }
         });
+
+
 
         // type
         typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -185,12 +187,19 @@ public class ConversionPanel extends JPanel {
         filenamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         filenamePanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
         filenamePanel.setBorder(BorderFactory.createTitledBorder("Filenames"));
-        JButton renameAll = new JButton("Rename Linked Files");
-        renameAll.addActionListener(e->{
-            Util.renameLinkedFiles(conversion);
-            updateLinkedFiles();
-        });
-        filenamePanel.add(renameAll);
+            JButton renameAll = new JButton("Rename Linked Files");
+            renameAll.addActionListener(e->{
+                Util.renameLinkedFiles(conversion);
+                updateLinkedFiles();
+            });
+            filenamePanel.add(renameAll);
+
+            JButton renameAllToNote = new JButton("Rename Linked Files to Note");
+            renameAllToNote.addActionListener(e->{
+                Util.renameLinkedFilesToNote(conversion);
+                updateLinkedFiles();
+            });
+            filenamePanel.add(renameAllToNote);
 
         // date
         dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT));

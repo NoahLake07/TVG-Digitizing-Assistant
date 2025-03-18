@@ -202,7 +202,7 @@ public class DigitizingAssistant {
         try {
             icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon.png")));
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw new Error("Failed to get icon.");
         }
         return icon;
     }

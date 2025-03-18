@@ -46,6 +46,24 @@ public class Util {
         JOptionPane.showMessageDialog(null, "Renamed " + i + " files.", "Rename Success", JOptionPane.INFORMATION_MESSAGE);
     }
 
+    public static void renameLinkedFilesToNote(Conversion c){
+        if(c.linkedFiles.isEmpty()){
+            return;
+        }
+
+        ListIterator<File> iterator = c.linkedFiles.listIterator();
+        int i = 0;
+        while(iterator.hasNext()){
+            File f = iterator.next();
+            ++i;
+            // Rename the file and replace it in the list
+            iterator.set(renameFile(f, c.note + (i > 1 ? " (" + i + ")" : "")));
+        }
+
+        // Completion dialog
+        JOptionPane.showMessageDialog(null, "Renamed " + i + " files.", "Rename Success", JOptionPane.INFORMATION_MESSAGE);
+    }
+
     public static void renameFiles(ArrayList<File> files, String newName){
         if(files.isEmpty()){
             return;
