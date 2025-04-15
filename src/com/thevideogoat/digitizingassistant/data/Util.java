@@ -5,6 +5,7 @@ import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
 import javax.swing.*;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.ListIterator;
 
 public class Util {
@@ -116,27 +117,82 @@ public class Util {
         }
     }
 
-    public static ArrayList<Conversion> sortConversionsBy(ArrayList<Conversion> conversions, String sortOption){
-        if(sortOption.equals("Name")){
-            for (int i = 0; i < conversions.size(); i++) {
-                int x = 0; // index of item with the least value found
+    public static ArrayList<Conversion> sortConversionsBy(ArrayList<Conversion> conversions, String criteria) {
+        ArrayList<Conversion> sorted = new ArrayList<>(conversions);
+        
+        switch (criteria.toLowerCase()) {
+            case "name":
+                sorted.sort((c1, c2) -> c1.name.compareToIgnoreCase(c2.name));
+                break;
+            case "natural sort":
+                sorted.sort((c1, c2) -> naturalCompare(c1.name, c2.name));
+                break;
+            case "status":
+                sorted.sort(Comparator.comparing(c -> c.status));
+                break;
+            case "duration":
+                sorted.sort(Comparator.comparing(c -> c.duration));
+                break;
+            case "type":
+                sorted.sort(Comparator.comparing(c -> c.type));
+                break;
+        }
+        
+        return sorted;
+    }
 
-                // find the least value in range [i,size-1]
-                for (int j = i; j < conversions.size(); j++) {
-                    int comparison = conversions.get(j).name.compareTo(conversions.get(x).name);
-                    if(comparison < 0){
-                        x = j;
-                    }
+    private static int naturalCompare(String a, String b) {
+        if (a == null || b == null) {
+            return 0;
+        }
+        
+        int aLen = a.length();
+        int bLen = b.length();
+        int i = 0;
+        int j = 0;
+        
+        while (i < aLen && j < bLen) {
+            char aChar = a.charAt(i);
+            char bChar = b.charAt(j);
+            
+            if (Character.isDigit(aChar) && Character.isDigit(bChar)) {
+                // Extract complete numbers from both strings
+                StringBuilder aNum = new StringBuilder();
+                StringBuilder bNum = new StringBuilder();
+                
+                while (i < aLen && Character.isDigit(a.charAt(i))) {
+                    aNum.append(a.charAt(i));
+                    i++;
                 }
-
-                // swap the least value with the value at i
-                Conversion temp = conversions.get(i);
-                conversions.set(i,conversions.get(x));
-                conversions.set(x,temp);
+                
+                while (j < bLen && Character.isDigit(b.charAt(j))) {
+                    bNum.append(b.charAt(j));
+                    j++;
+                }
+                
+                // Compare the numbers
+                int numCompare = Integer.compare(
+                    Integer.parseInt(aNum.toString()),
+                    Integer.parseInt(bNum.toString())
+                );
+                
+                if (numCompare != 0) {
+                    return numCompare;
+                }
+            } else {
+                // Compare characters case-insensitively
+                int charCompare = Character.toLowerCase(aChar) - 
+                                Character.toLowerCase(bChar);
+                if (charCompare != 0) {
+                    return charCompare;
+                }
+                i++;
+                j++;
             }
         }
-
-        return conversions;
+        
+        // If we've reached here, one string might be longer than the other
+        return aLen - bLen;
     }
 
     public static boolean isVideoFile(File file){
@@ -160,5 +216,66 @@ public class Util {
             }
         }
         return videoFiles;
+    }
+
+    public static void renameFilesWithOptions(ArrayList<File> files, String newName, 
+        boolean includeSubdirectories, boolean preserveNumbering) {
+        
+        if (files.isEmpty()) {
+            return;
+        }
+
+        int renamedCount = 0;
+        for (File file : files) {
+            if (file.isDirectory() && includeSubdirectories) {
+                // Rename all files in directory and subdirectories
+                renamedCount += renameFilesInDirectory(file, newName, includeSubdirectories, preserveNumbering);
+            } else {
+                // Rename just this file
+                String finalName = preserveNumbering ? 
+                    preserveNumberInFilename(file.getName(), newName) : 
+                    newName;
+                renameFile(file, finalName);
+                renamedCount++;
+            }
+        }
+
+        JOptionPane.showMessageDialog(null, 
+            "Renamed " + renamedCount + " files/directories.", 
+            "Rename Success", 
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static String preserveNumberInFilename(String oldName, String newName) {
+        // Extract any numbers from the old filename
+        String numbers = oldName.replaceAll("[^0-9]", "");
+        if (!numbers.isEmpty()) {
+            // If old name had numbers, append them to new name
+            return newName + "_" + numbers;
+        }
+        return newName;
+    }
+
+    private static int renameFilesInDirectory(File directory, String baseName, boolean includeSubdirectories, boolean preserveNumbering) {
+        File[] files = directory.listFiles();
+        if (files == null) return 0;
+
+        int count = 0;
+        int fileIndex = 0;
+
+        for (File file : files) {
+            if (file.isDirectory() && includeSubdirectories) {
+                count += renameFilesInDirectory(file, baseName + "_" + file.getName(), includeSubdirectories, preserveNumbering);
+            } else {
+                String newName = baseName + (fileIndex > 0 ? " (" + fileIndex + ")" : "");
+                String finalName = preserveNumbering ? 
+                    preserveNumberInFilename(file.getName(), newName) : 
+                    newName;
+                renameFile(file, finalName);
+                fileIndex++;
+                count++;
+            }
+        }
+        return count;
     }
 }

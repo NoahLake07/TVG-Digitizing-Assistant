@@ -18,7 +18,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.2";
+    public static final String VERSION = "1.3";
 
     private static DigitizingAssistant instance;
 
@@ -36,48 +36,94 @@ public class DigitizingAssistant {
     }
 
     public void chooseProject() {
-        JFrame projectChooser = new JFrame("Choose a project");
-        projectChooser.setSize(300, 400);
+        JFrame projectChooser = new JFrame();
+        projectChooser.setUndecorated(true);
+        projectChooser.setSize(400, 600);
+        projectChooser.setLocationRelativeTo(null);
         projectChooser.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         setIcon(projectChooser);
 
-        // project chooser panel
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        // Main panel with dark background
+        JPanel mainPanel = new JPanel();
+        mainPanel.setLayout(new BorderLayout());
+        Theme.stylePanel(mainPanel);
+        mainPanel.setBorder(BorderFactory.createLineBorder(Theme.BORDER, 1));
 
-        // header
-        JPanel headerPanel = new JPanel();
-        JLabel header = new JLabel("Digitizing Assistant");
-        header.setAlignmentX(Component.LEFT_ALIGNMENT);
-        header.setFont(new Font("Arial", Font.BOLD, 20));
-        headerPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 50));
-
-        ImageIcon icon = new ImageIcon(DigitizingAssistant.getIcon().getScaledInstance(30, 30, Image.SCALE_SMOOTH));
+        // Title bar panel
+        JPanel titleBar = new JPanel(new BorderLayout());
+        titleBar.setBackground(Theme.SURFACE);
+        titleBar.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
+        
+        // Header with icon and text
+        JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        headerPanel.setOpaque(false);
+        
+        ImageIcon icon = new ImageIcon(getIcon().getScaledInstance(24, 24, Image.SCALE_SMOOTH));
         JLabel iconLabel = new JLabel(icon);
+        
+        JLabel header = new JLabel("Digitizing Assistant");
+        header.setForeground(Theme.TEXT);
+        header.setFont(Theme.HEADER_FONT);
+        
         headerPanel.add(iconLabel);
         headerPanel.add(header);
-        panel.add(headerPanel);
+        titleBar.add(headerPanel, BorderLayout.WEST);
 
-        // project list
+        // Close button
+        JLabel closeButton = new JLabel("×");
+        closeButton.setForeground(Theme.TEXT);
+        closeButton.setFont(Theme.HEADER_FONT);
+        closeButton.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 0));
+        closeButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        closeButton.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent e) {
+                projectChooser.dispose();
+            }
+            public void mouseEntered(MouseEvent e) {
+                closeButton.setForeground(new Color(255, 80, 80));
+            }
+            public void mouseExited(MouseEvent e) {
+                closeButton.setForeground(Theme.TEXT);
+            }
+        });
+        titleBar.add(closeButton, BorderLayout.EAST);
+
+        // Content panel
+        JPanel contentPanel = new JPanel();
+        contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+        Theme.stylePanel(contentPanel);
+        contentPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        // Project list
         JList<File> projectList = new JList<>();
+        Theme.styleList(projectList);
         projectList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        projectList.setLayoutOrientation(JList.VERTICAL);
-        projectList.setMaximumSize(new Dimension(Short.MAX_VALUE, 500));
+        
+        // Scrollpane
+        JScrollPane scrollPane = new JScrollPane(projectList);
+        Theme.styleScrollPane(scrollPane);
+        scrollPane.setPreferredSize(new Dimension(360, 400));
 
-        // Set a custom cell renderer
+        // Set custom cell renderer
         projectList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
                 Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 if (c instanceof JLabel && value instanceof File) {
-                    // Set the text of the label to the name of the file
-                    ((JLabel) c).setText(((File) value).getName());
+                    JLabel label = (JLabel) c;
+                    String name = ((File) value).getName();
+                    name = name.substring(0, name.lastIndexOf(".project"));
+                    label.setText(name);
+                    // Add padding to the left
+                    label.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
                 }
-                return c;
+                setForeground(isSelected ? Theme.TEXT : Theme.TEXT_SECONDARY);
+                setBackground(isSelected ? Theme.ACCENT : Theme.SURFACE);
+                return this;
             }
         });
 
+        // Load projects
         File[] allProjects = PROJECTS_DIRECTORY.listFiles();
         DefaultListModel<File> listModel = new DefaultListModel<>();
         if (allProjects != null) {
@@ -89,108 +135,75 @@ public class DigitizingAssistant {
         }
         projectList.setModel(listModel);
 
-        // Create a popup menu
-        JPopupMenu popupMenu = new JPopupMenu();
+        // Button panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        buttonPanel.setOpaque(false);
+        
+        JButton newProjectBtn = new JButton("New Project");
+        JButton openProjectBtn = new JButton("Open Project");
+        Theme.styleButton(newProjectBtn);
+        Theme.styleButton(openProjectBtn);
 
-        // Open in File Explorer option
-        JMenuItem openFolderMenuItem = new JMenuItem("Reveal in Explorer");
-        openFolderMenuItem.addActionListener(e -> {
-            int selectedIndex = projectList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                File selectedFile = listModel.getElementAt(selectedIndex);
-                if (selectedFile.exists()) {
-                    try {
-                        if (OS.contains("win")) {
-                            // Windows: Open the folder in File Explorer
-                            Desktop.getDesktop().open(selectedFile.getParentFile());
-                        } else if (OS.contains("mac")) {
-                            // macOS: Open the folder in Finder
-                            new ProcessBuilder("open", selectedFile.getAbsolutePath()).start();
-                        } else {
-                            // Linux: Open the folder in the default file manager
-                            new ProcessBuilder("xdg-open", selectedFile.getAbsolutePath()).start();
-                        }
-                    } catch (IOException ex) {
-                        JOptionPane.showMessageDialog(null, "Failed to open the project folder.", "Error", JOptionPane.ERROR_MESSAGE);
+        newProjectBtn.addActionListener(e -> {
+            String projectName = JOptionPane.showInputDialog(projectChooser, "Project Name:");
+            if (projectName != null && !projectName.trim().isEmpty()) {
+                new ProjectFrame(new Project(projectName));
+                projectChooser.dispose();
+            }
+        });
+
+        openProjectBtn.addActionListener(e -> {
+            if (projectList.getSelectedValue() != null) {
+                new ProjectFrame(new Project(projectList.getSelectedValue().toPath()));
+                projectChooser.dispose();
+            }
+        });
+
+        // Enable/disable open button based on selection
+        projectList.addListSelectionListener(e -> {
+            openProjectBtn.setEnabled(projectList.getSelectedValue() != null);
+        });
+        openProjectBtn.setEnabled(false);
+
+        // Add double-click functionality
+        projectList.addMouseListener(new MouseAdapter() {
+            public void mouseClicked(MouseEvent me) {
+                if (me.getClickCount() == 2) {
+                    int index = projectList.locationToIndex(me.getPoint());
+                    if (index != -1) {
+                        File selectedFile = listModel.getElementAt(index);
+                        new ProjectFrame(new Project(selectedFile.toPath()));
+                        projectChooser.dispose();
                     }
                 }
             }
         });
-        popupMenu.add(openFolderMenuItem);
 
-        // Delete option
-        JMenuItem deleteMenuItem = new JMenuItem("Delete");
-        deleteMenuItem.addActionListener(e -> {
-            int selectedIndex = projectList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                // Delete the project file
-                File selectedFile = listModel.getElementAt(selectedIndex);
-                boolean deleted = selectedFile.delete();
-                if (deleted) {
-                    // Remove the item from the list
-                    listModel.remove(selectedIndex);
-                } else {
-                    JOptionPane.showMessageDialog(null, "Failed to delete the project file.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-        popupMenu.add(deleteMenuItem);
-
-        // Add a mouse listener to the list
-        projectList.addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent me) {
-                if (SwingUtilities.isRightMouseButton(me) && !projectList.isSelectionEmpty() && projectList.locationToIndex(me.getPoint()) == projectList.getSelectedIndex()) {
-                    popupMenu.show(projectList, me.getX(), me.getY());
-                }
-            }
-        });
-
-        panel.add(projectList);
-
-        // button panel
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttonPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 50));
-        Dimension buttonBounds = new Dimension(150, 50);
-
-        // new project button
-        JButton newProjectBtn = new JButton("New Project");
-        newProjectBtn.setMaximumSize(buttonBounds);
-        newProjectBtn.addActionListener(e -> {
-            // create a new project
-            String projectName = JOptionPane.showInputDialog("Project Name:");
-            if (projectName != null) {
-                new ProjectFrame(new Project(projectName));
-                projectChooser.setVisible(false);
-            }
-        });
         buttonPanel.add(newProjectBtn);
+        buttonPanel.add(openProjectBtn);
 
-        // open project button
-        JButton openProjectBtn = new JButton("Open Project");
-        openProjectBtn.setMaximumSize(buttonBounds);
-        openProjectBtn.addActionListener(e -> {
-            // open the project that the user selected
-            new ProjectFrame(new Project(projectList.getSelectedValue().toPath()));
-            projectChooser.setVisible(false);
-        });
-        projectList.addListSelectionListener(e -> {
-            if (projectList.getSelectedValue() != null) {
-                openProjectBtn.setEnabled(true);
+        contentPanel.add(scrollPane);
+        contentPanel.add(Box.createVerticalStrut(20));
+        contentPanel.add(buttonPanel);
+
+        mainPanel.add(titleBar, BorderLayout.NORTH);
+        mainPanel.add(contentPanel, BorderLayout.CENTER);
+        
+        projectChooser.add(mainPanel);
+        projectChooser.setVisible(true);
+
+        // Make window draggable
+        titleBar.addMouseMotionListener(new MouseAdapter() {
+            public void mouseDragged(MouseEvent e) {
+                Point p = projectChooser.getLocation();
+                projectChooser.setLocation(p.x + e.getX(), p.y + e.getY());
             }
         });
-        if (projectList.getSelectedValue() == null) {
-            openProjectBtn.setEnabled(false);
-        }
-        buttonPanel.add(openProjectBtn);
-        panel.add(buttonPanel);
-
-        projectChooser.add(panel);
-        projectChooser.setVisible(true);
     }
 
     public static void setIcon(JFrame frame) {
         try {
-            BufferedImage icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon.png")));
+            BufferedImage icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon0.png")));
             frame.setIconImage(icon);
         } catch (IOException e) {
             throw new Error("Failed to set icon.");
@@ -200,7 +213,7 @@ public class DigitizingAssistant {
     public static BufferedImage getIcon() {
         BufferedImage icon = null;
         try {
-            icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon.png")));
+            icon = ImageIO.read(Objects.requireNonNull(DigitizingAssistant.class.getResourceAsStream("/tvgdigassistappicon0.png")));
         } catch (IOException e) {
             throw new Error("Failed to get icon.");
         }

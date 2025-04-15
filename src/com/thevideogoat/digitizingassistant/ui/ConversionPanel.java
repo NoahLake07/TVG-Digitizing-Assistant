@@ -7,6 +7,8 @@ import com.thevideogoat.digitizingassistant.data.Util;
 
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
+import javax.swing.border.Border;
+import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -42,16 +44,19 @@ public class ConversionPanel extends JPanel {
 
     private void setupUI(){
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+        setBackground(Theme.BACKGROUND);
+        setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
 
         Dimension basicRowMaxSize = new Dimension(Short.MAX_VALUE, 50);
 
         // header
         JPanel headerRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        headerRow.setMaximumSize(basicRowMaxSize);
+        headerRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
+        headerRow.setBackground(Theme.BACKGROUND);
         header = new JLabel(conversion.name);
-        header.setFont(new Font("Arial", Font.BOLD, 20));
+        header.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 28));
+        header.setForeground(Theme.TEXT);
         headerRow.add(header);
-        add(headerRow);
 
         // rename conversion to conversion name
         JPopupMenu renameMenu = new JPopupMenu();
@@ -72,36 +77,61 @@ public class ConversionPanel extends JPanel {
             }
         });
 
-
-
         // type
         typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        typeRow.setMaximumSize(basicRowMaxSize);
+        typeRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
+        typeRow.setBackground(Theme.BACKGROUND);
         type = new JLabel("Tape Format Type");
+        type.setForeground(Color.WHITE);
+        type.setFont(Theme.NORMAL_FONT);
+        
         typeSelector = new JComboBox<>(Type.values());
         if (conversion.type != null) typeSelector.setSelectedItem(conversion.type);
-        typeSelector.setPreferredSize(new Dimension(100, 20));
+        typeSelector.setPreferredSize(new Dimension(150, 30));
         typeRow.add(type);
+        typeRow.add(Box.createHorizontalStrut(10));
         typeRow.add(typeSelector);
 
         // note
         noteRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        noteRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
+        noteRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
+        noteRow.setBackground(Theme.BACKGROUND);
         note = new JLabel("Conversion Notes");
+        note.setForeground(Color.WHITE);
+        note.setFont(Theme.NORMAL_FONT);
+        
         noteField = new JTextField(conversion.note);
-        noteField.setPreferredSize(new Dimension(200, 30));
+        noteField.setPreferredSize(new Dimension(400, 30));
+        Theme.styleTextField(noteField);
+        
         noteRow.add(note);
+        noteRow.add(Box.createHorizontalStrut(10));
         noteRow.add(noteField);
 
         // linked files
         filesPanel = new JPanel();
         filesPanel.setLayout(new BoxLayout(filesPanel, BoxLayout.Y_AXIS));
-        filesPanel.setBorder(BorderFactory.createTitledBorder("Linked Files"));
-        filesPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 150));
+        filesPanel.setBackground(Theme.BACKGROUND);
+        filesPanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                "Linked Files",
+                TitledBorder.DEFAULT_JUSTIFICATION,
+                TitledBorder.DEFAULT_POSITION,
+                Theme.NORMAL_FONT,
+                Theme.TEXT
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        filesPanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 200));
+
         filesList = new JList<>();
-        filesList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        filesList.setLayoutOrientation(JList.VERTICAL);
-        filesList.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
+        Theme.styleList(filesList);
+        
+        JScrollPane scrollPane = new JScrollPane(filesList);
+        Theme.styleScrollPane(scrollPane);
+        scrollPane.setPreferredSize(new Dimension(400, 150));
+        
         DefaultListModel<File> listModel = new DefaultListModel<>();
         if(conversion.linkedFiles != null) {
             for (File f : conversion.linkedFiles) {
@@ -111,121 +141,166 @@ public class ConversionPanel extends JPanel {
             listModel.addElement(new File("No files attached"));
         }
         filesList.setModel(listModel);
-        filesPanel.add(filesList);
 
-        JPanel filesButtonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        // Files button panel with both Attach and Rename buttons
+        JPanel filesButtonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
+        filesButtonRow.setBackground(Theme.BACKGROUND);
+
+        // Rename Options button
+        JButton renameOptionsBtn = new JButton("Rename Options");
+        Theme.styleButton(renameOptionsBtn);
+        renameOptionsBtn.addActionListener(e -> {
+            if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "No files are linked to rename.",
+                    "No Files",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            String[] options = {
+                "Rename to conversion name",
+                "Rename to conversion note",
+                "Custom name...",
+                "Cancel"
+            };
+            
+            // Create checkbox for subdirectories
+            JCheckBox includeSubdirs = new JCheckBox("Include files in subdirectories", false);
+            includeSubdirs.setToolTipText("If checked, files in subdirectories will also be renamed.");
+            
+            // Create preserve numbering checkbox
+            JCheckBox preserveNumbering = new JCheckBox("Preserve existing numbering", false);
+            preserveNumbering.setToolTipText("If checked, will try to maintain any existing numbers in filenames.");
+            
+            // Create custom dialog
+            JPanel dialogPanel = new JPanel();
+            dialogPanel.setLayout(new BoxLayout(dialogPanel, BoxLayout.Y_AXIS));
+            dialogPanel.add(new JLabel("Select rename option:"));
+            dialogPanel.add(Box.createVerticalStrut(10));
+            dialogPanel.add(includeSubdirs);
+            dialogPanel.add(Box.createVerticalStrut(5));
+            dialogPanel.add(preserveNumbering);
+            
+            int choice = JOptionPane.showOptionDialog(
+                this,
+                dialogPanel,
+                "Rename Options",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+            );
+            
+            String newName = null;
+            switch (choice) {
+                case 0: // Conversion name
+                    newName = conversion.name;
+                    break;
+                case 1: // Conversion note
+                    if (conversion.note.isEmpty()) {
+                        JOptionPane.showMessageDialog(this, 
+                            "Conversion note is empty. Please add a note first.", 
+                            "Warning", 
+                            JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    newName = conversion.note;
+                    break;
+                case 2: // Custom name
+                    newName = JOptionPane.showInputDialog(this,
+                        "Enter custom name:",
+                        "Custom Filename",
+                        JOptionPane.PLAIN_MESSAGE);
+                    if (newName == null || newName.trim().isEmpty()) {
+                        return;
+                    }
+                    break;
+                default:
+                    return;
+            }
+            
+            // Confirm rename operation
+            int confirm = JOptionPane.showConfirmDialog(this,
+                String.format("Rename %d file(s) to \"%s\"?", 
+                    conversion.linkedFiles.size(), newName),
+                "Confirm Rename",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                Util.renameFilesWithOptions(
+                    conversion.linkedFiles, 
+                    newName,
+                    includeSubdirs.isSelected(),
+                    preserveNumbering.isSelected()
+                );
+                updateLinkedFiles();
+            }
+        });
+
         addFileBtn = new JButton("Attach File");
-        addFileBtn.addActionListener(e -> {
-            // open a file chooser dialog
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            fileChooser.setMultiSelectionEnabled(true);
-            int result = fileChooser.showOpenDialog(this);
-            if(result == JFileChooser.APPROVE_OPTION){
-                for(File f : fileChooser.getSelectedFiles()){
-                    listModel.addElement(f);
-                    conversion.linkedFiles.add(f);
-                }
-            }
-        });
+        Theme.styleButton(addFileBtn);
+
+        filesButtonRow.add(renameOptionsBtn);
+        filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(addFileBtn);
+
+        filesPanel.add(scrollPane);
+        filesPanel.add(Box.createVerticalStrut(10));
         filesPanel.add(filesButtonRow);
-
-        // Create a popup menu
-        JPopupMenu popupMenu = new JPopupMenu();
-        JMenuItem openMenuItem = new JMenuItem("Open File");
-        JMenuItem openFileLocationItem = new JMenuItem("Open File Location");
-        JMenuItem renameFile = new JMenuItem("Auto Rename");
-        JMenuItem removeMenuItem = new JMenuItem("Remove");
-        openMenuItem.addActionListener(e -> {
-            int selectedIndex = filesList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                File selectedFile = listModel.getElementAt(selectedIndex);
-                try {
-                    Desktop.getDesktop().open(selectedFile);
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(null, "Failed to open the file.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-        openFileLocationItem.addActionListener(e -> {
-            int selectedIndex = filesList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                File selectedFile = listModel.getElementAt(selectedIndex);
-                try {
-                    Desktop.getDesktop().open(selectedFile.getParentFile());
-                } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(null, "Failed to open the file location.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
-            }
-        });
-        renameFile.addActionListener(e -> {
-            Util.renameFile(listModel.getElementAt(filesList.getSelectedIndex()), conversion.name);
-            updateLinkedFiles();
-        });
-        removeMenuItem.addActionListener(e -> {
-            int selectedIndex = filesList.getSelectedIndex();
-            if (selectedIndex != -1) {
-                listModel.remove(selectedIndex);
-                conversion.linkedFiles.remove(selectedIndex);
-            }
-        });
-        popupMenu.add(openMenuItem);
-        popupMenu.add(openFileLocationItem);
-        popupMenu.add(removeMenuItem);
-
-        // Add a mouse listener to the list
-        filesList.addMouseListener(new MouseAdapter()    {
-            public void mousePressed(MouseEvent me) {
-                if (SwingUtilities.isRightMouseButton(me) && !filesList.isSelectionEmpty() && filesList.locationToIndex(me.getPoint()) == filesList.getSelectedIndex()) {
-                    popupMenu.show(filesList, me.getX(), me.getY());
-                }
-            }
-        });
-
-        // filename panel
-        filenamePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        filenamePanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 100));
-        filenamePanel.setBorder(BorderFactory.createTitledBorder("Filenames"));
-            JButton renameAll = new JButton("Rename Linked Files");
-            renameAll.addActionListener(e->{
-                Util.renameLinkedFiles(conversion);
-                updateLinkedFiles();
-            });
-            filenamePanel.add(renameAll);
-
-            JButton renameAllToNote = new JButton("Rename Linked Files to Note");
-            renameAllToNote.addActionListener(e->{
-                Util.renameLinkedFilesToNote(conversion);
-                updateLinkedFiles();
-            });
-            filenamePanel.add(renameAllToNote);
 
         // date
         dateRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        dateRow.setBorder(BorderFactory.createTitledBorder("Date of Conversion"));
-        dateRow.setMaximumSize(basicRowMaxSize);
-        setupDateTimeSpinners(); // setting time to now
-        JSpinner.NumberEditor yyyyEditor = new JSpinner.NumberEditor(yyyySpinner, "0000");
-        yyyySpinner.setEditor(yyyyEditor);
-        dateRow.add(mmSpinner);
-        dateRow.add(ddSpinner);
-        dateRow.add(yyyySpinner);
+        dateRow.setBackground(Theme.BACKGROUND);
+        dateRow.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                "Date of Conversion",
+                TitledBorder.DEFAULT_JUSTIFICATION,
+                TitledBorder.DEFAULT_POSITION,
+                Theme.NORMAL_FONT,
+                Theme.TEXT
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        dateRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
 
-        // Add button to update date to current date
+        setupDateTimeSpinners();
+        
+        // Style spinners with explicit colors
+        Component[] spinners = {mmSpinner, ddSpinner, yyyySpinner};
+        for (Component spinner : spinners) {
+            ((JSpinner)spinner).setPreferredSize(new Dimension(70, 30));
+        }
+
         JButton updateDateBtn = new JButton("Update to Current Date");
-        updateDateBtn.addActionListener(e -> {
-            LocalDate currentDate = LocalDate.now();
-            mmSpinner.setValue(currentDate.getMonthValue());
-            ddSpinner.setValue(currentDate.getDayOfMonth());
-            yyyySpinner.setValue(currentDate.getYear());
-        });
+        Theme.styleButton(updateDateBtn);
+        
+        dateRow.add(mmSpinner);
+        dateRow.add(Box.createHorizontalStrut(5));
+        dateRow.add(ddSpinner);
+        dateRow.add(Box.createHorizontalStrut(5));
+        dateRow.add(yyyySpinner);
+        dateRow.add(Box.createHorizontalStrut(10));
         dateRow.add(updateDateBtn);
 
         // time
         timeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        timeRow.setBorder(BorderFactory.createTitledBorder("Time of Conversion"));
-        timeRow.setMaximumSize(basicRowMaxSize);
+        timeRow.setBackground(Theme.BACKGROUND);
+        timeRow.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                "Time of Conversion",
+                TitledBorder.DEFAULT_JUSTIFICATION,
+                TitledBorder.DEFAULT_POSITION,
+                Theme.NORMAL_FONT,
+                Theme.TEXT
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        timeRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
 
         try {
             SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
@@ -242,8 +317,12 @@ public class ConversionPanel extends JPanel {
             timeRow.add(hhSpinner);
             timeRow.add(minSpinner);
             amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
-            if (conversion.timeOfConversion.getAmPm() != null)
+            amPmSelector.setPreferredSize(new Dimension(70, 30));
+            amPmSelector.setBackground(Color.WHITE);
+            amPmSelector.setForeground(Color.BLACK);
+            if (conversion.timeOfConversion.getAmPm() != null) {
                 amPmSelector.setSelectedItem(conversion.timeOfConversion.getAmPm());
+            }
             timeRow.add(amPmSelector);
         } catch (NumberFormatException e) {
             SpinnerNumberModel hhModel = new SpinnerNumberModel(12, 1, 12, 1);
@@ -258,40 +337,54 @@ public class ConversionPanel extends JPanel {
             amPmSelector.setSelectedItem("AM");
             timeRow.add(amPmSelector);
         }
-        amPmSelector.setPreferredSize(new Dimension(50, 20));
+        hhSpinner.setPreferredSize(new Dimension(70, 30));
+        minSpinner.setPreferredSize(new Dimension(70, 30));
+        
+        amPmSelector.setPreferredSize(new Dimension(70, 30));
 
-        // Add button to update time to current time
         JButton updateTimeBtn = new JButton("Update to Current Time");
-        updateTimeBtn.addActionListener(e -> {
-            LocalTime currentTime = LocalTime.now();
-            int hour = currentTime.getHour();
-            int minute = currentTime.getMinute();
-            String amPm = hour >= 12 ? "PM" : "AM";
-            hour = hour % 12;
-            if (hour == 0) hour = 12;
-            hhSpinner.setValue(hour);
-            minSpinner.setValue(minute);
-            amPmSelector.setSelectedItem(amPm);
-        });
+        Theme.styleButton(updateTimeBtn);
+
+        timeRow.add(hhSpinner);
+        timeRow.add(Box.createHorizontalStrut(5));
+        timeRow.add(minSpinner);
+        timeRow.add(Box.createHorizontalStrut(5));
+        timeRow.add(amPmSelector);
+        timeRow.add(Box.createHorizontalStrut(10));
         timeRow.add(updateTimeBtn);
 
         // tape duration
         tapeDurationRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        tapeDurationRow.setMaximumSize(basicRowMaxSize);
+        tapeDurationRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
+        tapeDurationRow.setBackground(Theme.BACKGROUND);
+        
         JLabel tapeDurationLabel = new JLabel("Tape Duration (minutes)");
-        SpinnerNumberModel tapeDurationModel = new SpinnerNumberModel((int) conversion.duration.toMinutes(), 0, Integer.MAX_VALUE, 1);
-        tapeDurationSpinner = new JSpinner(tapeDurationModel);
-        tapeDurationRow.add(tapeDurationLabel);
-        tapeDurationRow.add(tapeDurationSpinner);
+        tapeDurationLabel.setForeground(Color.WHITE);
+        tapeDurationLabel.setFont(Theme.NORMAL_FONT);
+        
+        tapeDurationSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) conversion.duration.toMinutes(), 0, Integer.MAX_VALUE, 1));
+        tapeDurationSpinner.setPreferredSize(new Dimension(100, 30));
 
         // status
         statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        statusRow.setMaximumSize(basicRowMaxSize);
-        statusRow.setBorder(BorderFactory.createTitledBorder("Current Status"));
+        statusRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
+        statusRow.setBackground(Theme.BACKGROUND);
+        statusRow.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                "Current Status",
+                TitledBorder.DEFAULT_JUSTIFICATION,
+                TitledBorder.DEFAULT_POSITION,
+                Theme.NORMAL_FONT,
+                Theme.TEXT
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+
         statusSelector = new JComboBox<>(ConversionStatus.values());
         statusSelector.setSelectedItem(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
-        Dimension prefSize = new Dimension(150,20);
-        statusSelector.setPreferredSize(prefSize);
+        statusSelector.setPreferredSize(new Dimension(150, 30));
 
         StatusIndicator statusIndicator = new StatusIndicator();
         statusSelector.addActionListener(e -> {
@@ -308,69 +401,126 @@ public class ConversionPanel extends JPanel {
             } else {
                 dateRow.setVisible(true);
                 timeRow.setVisible(true);
-                // Removed call to setupDateTimeSpinners()
             }
-            statusSelector.setPreferredSize(prefSize);
         });
+
         statusRow.add(statusIndicator);
+        statusRow.add(Box.createHorizontalStrut(10));
         statusRow.add(statusSelector);
-
-        ConversionStatus selectedStatus = (ConversionStatus) statusSelector.getSelectedItem();
-        if(selectedStatus == ConversionStatus.COMPLETED || selectedStatus == ConversionStatus.BASIC_EDITING){
-            tapeDurationRow.setVisible(true);
-        } else {
-            tapeDurationRow.setVisible(false);
-        }
-
-        if(selectedStatus == ConversionStatus.NOT_STARTED){
-            dateRow.setVisible(false);
-            timeRow.setVisible(false);
-        } else {
-            dateRow.setVisible(true);
-            timeRow.setVisible(true);
-        }
 
         // button row
         buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttonRow.setMaximumSize(basicRowMaxSize);
+        buttonRow.setBackground(Theme.BACKGROUND);
+        
         saveBtn = new JButton("Save");
-        saveBtn.addActionListener(e -> {
-            // save the conversion
-            conversion.name = header.getText();
-            conversion.note = noteField.getText();
-            conversion.type = (Type) typeSelector.getSelectedItem();
-            conversion.dateOfConversion.month = mmSpinner.getValue().toString();
-            conversion.dateOfConversion.day = ddSpinner.getValue().toString();
-            conversion.dateOfConversion.year = yyyySpinner.getValue().toString();
-            conversion.timeOfConversion.hour = hhSpinner.getValue().toString();
-            conversion.timeOfConversion.minute = minSpinner.getValue().toString();
-            conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
-            conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
-            conversion.duration = Duration.ofMinutes((Integer) tapeDurationSpinner.getValue());
-
-            // save the project (serialize it)
-            projectFrame.saveProject();
-        });
         JButton deleteBtn = new JButton("Delete");
-        deleteBtn.addActionListener(e -> {
-            // delete the conversion
-            projectFrame.remove(this);
-            projectFrame.saveProject();
-        });
-
+        Theme.styleButton(saveBtn);
+        Theme.styleButton(deleteBtn);
+        
         buttonRow.add(deleteBtn);
+        buttonRow.add(Box.createHorizontalStrut(10));
         buttonRow.add(saveBtn);
 
-        // add components to the panel
+        // Add components with consistent spacing
+        add(headerRow);
+        add(Box.createVerticalStrut(15));
         add(typeRow);
+        add(Box.createVerticalStrut(15));
         add(noteRow);
+        add(Box.createVerticalStrut(15));
         add(filesPanel);
-        add(filenamePanel);
+        add(Box.createVerticalStrut(15));
         add(statusRow);
+        add(Box.createVerticalStrut(15));
         add(dateRow);
+        add(Box.createVerticalStrut(15));
         add(timeRow);
+        add(Box.createVerticalStrut(15));
         add(tapeDurationRow);
+        add(Box.createVerticalStrut(15));
         add(buttonRow);
+
+        // Add File button
+        addFileBtn.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setMultiSelectionEnabled(true);
+            int result = fileChooser.showOpenDialog(this);
+            
+            if (result == JFileChooser.APPROVE_OPTION) {
+                File[] selectedFiles = fileChooser.getSelectedFiles();
+                for (File file : selectedFiles) {
+                    if (!conversion.linkedFiles.contains(file)) {
+                        conversion.linkedFiles.add(file);
+                    }
+                }
+                updateLinkedFiles();
+                projectFrame.saveProject();
+            }
+        });
+
+        // Update Date button
+        updateDateBtn.addActionListener(e -> {
+            LocalDate now = LocalDate.now();
+            mmSpinner.setValue(now.getMonthValue());
+            ddSpinner.setValue(now.getDayOfMonth());
+            yyyySpinner.setValue(now.getYear());
+        });
+
+        // Update Time button
+        updateTimeBtn.addActionListener(e -> {
+            LocalTime now = LocalTime.now();
+            int hour = now.getHour();
+            String amPm = hour >= 12 ? "PM" : "AM";
+            hour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+            
+            hhSpinner.setValue(hour);
+            minSpinner.setValue(now.getMinute());
+            amPmSelector.setSelectedItem(amPm);
+        });
+
+        // Save button
+        saveBtn.addActionListener(e -> {
+            // Update conversion properties
+            conversion.type = (Type) typeSelector.getSelectedItem();
+            conversion.note = noteField.getText();
+            conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
+            
+            // Update date - format numbers to ensure two digits
+            conversion.dateOfConversion.month = String.format("%02d", (Integer)mmSpinner.getValue());
+            conversion.dateOfConversion.day = String.format("%02d", (Integer)ddSpinner.getValue());
+            conversion.dateOfConversion.year = String.format("%04d", (Integer)yyyySpinner.getValue());
+            
+            // Update time - format numbers to ensure two digits
+            conversion.timeOfConversion.hour = String.format("%02d", (Integer)hhSpinner.getValue());
+            conversion.timeOfConversion.minute = String.format("%02d", (Integer)minSpinner.getValue());
+            conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
+            
+            // Update duration if visible
+            if (tapeDurationRow.isVisible()) {
+                int minutes = (Integer) tapeDurationSpinner.getValue();
+                conversion.duration = Duration.ofMinutes(minutes);
+            }
+            
+            projectFrame.saveProject();
+            JOptionPane.showMessageDialog(this, 
+                "Changes saved successfully.", 
+                "Save Success", 
+                JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        // Delete button
+        deleteBtn.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to delete this conversion?\nThis action cannot be undone.",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                projectFrame.remove(this);
+            }
+        });
     }
 
     private void updateLinkedFiles(){
@@ -383,7 +533,6 @@ public class ConversionPanel extends JPanel {
             listModel.addElement(new File("No files attached"));
         }
         filesList.setModel(listModel);
-        filesPanel.add(filesList);
     }
 
     private void setupDateTimeSpinners(){
@@ -404,8 +553,15 @@ public class ConversionPanel extends JPanel {
             }
             // Year Spinner
             if(yyyySpinner == null) {
-                SpinnerNumberModel yyyyModel = new SpinnerNumberModel(Integer.parseInt(conversion.dateOfConversion.getYear()), 1900, 2100, 1);
+                SpinnerNumberModel yyyyModel = new SpinnerNumberModel(
+                    Integer.parseInt(conversion.dateOfConversion.getYear()), 
+                    1900, 
+                    2100, 
+                    1
+                );
                 yyyySpinner = new JSpinner(yyyyModel);
+                JSpinner.NumberEditor editor = new JSpinner.NumberEditor(yyyySpinner, "#");
+                yyyySpinner.setEditor(editor);
             } else {
                 yyyySpinner.setValue(Integer.parseInt(conversion.dateOfConversion.getYear()));
             }
@@ -442,19 +598,19 @@ public class ConversionPanel extends JPanel {
         public void updateColor(ConversionStatus status) {
             switch (status) {
                 case NOT_STARTED:
-                    setBackground(new Color(59, 59, 59));
+                    setBackground(new Color(158, 158, 158)); // Lighter gray for better visibility
                     break;
                 case DAMAGED:
-                    setBackground(new Color(204, 25, 25));
+                    setBackground(new Color(220, 53, 69)); // Bootstrap danger red
                     break;
                 case IN_PROGRESS:
-                    setBackground(new Color(255, 165, 0));
+                    setBackground(new Color(255, 193, 7)); // Bootstrap warning yellow
                     break;
                 case BASIC_EDITING:
-                    setBackground(new Color(83, 25, 194));
+                    setBackground(new Color(0, 123, 255)); // Bootstrap primary blue
                     break;
                 case COMPLETED:
-                    setBackground(new Color(0, 128, 0));
+                    setBackground(new Color(40, 167, 69)); // Bootstrap success green
                     break;
             }
         }
