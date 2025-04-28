@@ -54,7 +54,7 @@ public class ConversionPanel extends JPanel {
         headerRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
         headerRow.setBackground(Theme.BACKGROUND);
         header = new JLabel(conversion.name);
-        header.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 28));
+        header.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 24));
         header.setForeground(Theme.TEXT);
         headerRow.add(header);
 
@@ -445,6 +445,7 @@ public class ConversionPanel extends JPanel {
         addFileBtn.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setMultiSelectionEnabled(true);
+            fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
             int result = fileChooser.showOpenDialog(this);
             
             if (result == JFileChooser.APPROVE_OPTION) {

@@ -278,4 +278,100 @@ public class Util {
         }
         return count;
     }
+
+    public static void relinkToTrimmedFiles(Project project) {
+        // Prompt the user to select the directory containing trimmed files
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        int result = fileChooser.showOpenDialog(null);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File trimmedDirectory = fileChooser.getSelectedFile();
+
+            // Create options dialog
+            String[] options = {
+                "Replace matching files with trimmed versions",
+                "Add trimmed files to existing linked files"
+            };
+
+            int choice = JOptionPane.showOptionDialog(null,
+                "How would you like to handle the trimmed files?",
+                "Relink Options",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]);
+
+            if (choice == -1) return; // User cancelled
+
+            int replacedCount = 0;
+            int addedCount = 0;
+            int removedCount = 0;
+            ArrayList<File> filesToRemove = new ArrayList<>();
+
+            // For each conversion in the project
+            for (Conversion conversion : project.getConversions()) {
+                ArrayList<File> updatedFiles = new ArrayList<>();
+
+                // For each linked file in the conversion
+                for (File oldFile : conversion.linkedFiles) {
+                    String oldName = oldFile.getName();
+                    String baseName = oldName.substring(0, oldName.lastIndexOf('.'));
+                    String extension = oldName.substring(oldName.lastIndexOf('.'));
+                    
+                    // Simply append _trimmed to the original filename before the extension
+                    String trimmedName = baseName + "_trimmed" + extension;
+                    
+                    File trimmedFile = new File(trimmedDirectory, trimmedName);
+
+                    if (trimmedFile.exists()) {
+                        if (choice == 0) {
+                            // Option 1: Replace matching files
+                            updatedFiles.add(trimmedFile);
+                            replacedCount++;
+                        } else {
+                            // Option 2: Add trimmed files to existing
+                            updatedFiles.add(oldFile);
+                            updatedFiles.add(trimmedFile);
+                            addedCount++;
+                        }
+                    } else {
+                        // If trimmed file not found, ask user if they want to remove it
+                        int removeChoice = JOptionPane.showConfirmDialog(null,
+                            "No trimmed version found for: " + oldName + "\n\nWould you like to remove this file from the linked files?",
+                            "File Not Found",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.QUESTION_MESSAGE);
+                        
+                        if (removeChoice == JOptionPane.YES_OPTION) {
+                            filesToRemove.add(oldFile);
+                            removedCount++;
+                        } else {
+                            // Keep the original file if user chooses not to remove it
+                            updatedFiles.add(oldFile);
+                        }
+                    }
+                }
+
+                // Update the conversion's linked files
+                conversion.linkedFiles = updatedFiles;
+            }
+
+            // Notify the user of completion
+            StringBuilder message = new StringBuilder();
+            
+            if (choice == 0) {
+                message.append(String.format("%d files replaced with trimmed versions.", replacedCount));
+            } else {
+                message.append(String.format("%d trimmed files added to existing linked files.", addedCount));
+            }
+            
+            if (removedCount > 0) {
+                message.append(String.format("\n%d files were removed because no trimmed versions were found.", removedCount));
+            }
+            
+            JOptionPane.showMessageDialog(null, message.toString(), "Relink Success", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
 }

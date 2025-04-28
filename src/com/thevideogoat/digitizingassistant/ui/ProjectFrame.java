@@ -1,9 +1,6 @@
 package com.thevideogoat.digitizingassistant.ui;
 
-import com.thevideogoat.digitizingassistant.data.Conversion;
-import com.thevideogoat.digitizingassistant.data.Project;
-import com.thevideogoat.digitizingassistant.data.Type;
-import com.thevideogoat.digitizingassistant.data.Util;
+import com.thevideogoat.digitizingassistant.data.*;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -118,18 +115,18 @@ public class ProjectFrame extends JFrame {
         JMenuItem refreshList = new JMenuItem("Refresh List");
         JMenuItem exportProject = new JMenuItem("Export Project as JSON");
         JMenuItem mediaStats = new JMenuItem("Media Statistics");
-        JMenuItem settings = new JMenuItem("Project Settings");
+        JMenuItem relinkTrimmed = new JMenuItem("Relink to Trimmed Files");
         
         refreshList.addActionListener(e -> refreshConversionList());
         exportProject.addActionListener(e -> exportProjectAsJson());
         mediaStats.addActionListener(e -> showMediaStatistics());
-        settings.addActionListener(e -> showProjectSettings());
+        relinkTrimmed.addActionListener(e -> Util.relinkToTrimmedFiles(project));
         
         menu.add(refreshList);
         menu.add(exportProject);
         menu.addSeparator();
         menu.add(mediaStats);
-        menu.add(settings);
+        menu.add(relinkTrimmed);
         
         menuButton.addActionListener(e -> {
             menu.show(menuButton, 0, menuButton.getHeight());
@@ -225,6 +222,9 @@ public class ProjectFrame extends JFrame {
         splitPane.setBorder(null);
         splitPane.setDividerSize(4);
         
+        // Remove the default split pane borders
+        splitPane.setBorder(BorderFactory.createEmptyBorder());
+
         // Custom divider styling
         splitPane.setUI(new BasicSplitPaneUI() {
             public BasicSplitPaneDivider createDefaultDivider() {
@@ -348,6 +348,7 @@ public class ProjectFrame extends JFrame {
         // Details panel
         detailsPanel = new JPanel(new BorderLayout());
         Theme.stylePanel(detailsPanel);
+        detailsPanel.setBorder(BorderFactory.createEmptyBorder());
         displayTempContentPanel();
 
         // Load existing conversions
@@ -402,12 +403,28 @@ public class ProjectFrame extends JFrame {
         conversionBtn.setMaximumSize(new Dimension(Short.MAX_VALUE, 35));
         conversionBtn.setHorizontalAlignment(SwingConstants.LEFT);
         
-        // Simplified styling
+        // Enhanced styling
         Theme.styleButton(conversionBtn);
-        conversionBtn.setForeground(conversion.getStatusColor());
+        conversionBtn.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10)); // Add padding
+        updateConversionButtonStyle(conversionBtn, conversion, false);
         
-        // Add click handler
-        conversionBtn.addActionListener(e -> showConversionDetails(conversion));
+        // Add click handler with selection state
+        conversionBtn.addActionListener(e -> {
+            // Reset all other buttons to unselected state
+            for (Component c : conversionListPanel.getComponents()) {
+                if (c instanceof JButton) {
+                    JButton btn = (JButton) c;
+                    // Find the corresponding conversion for this button
+                    for (Conversion conv : project.getConversions()) {
+                        if (btn.getText().equals(conv.name)) {
+                            updateConversionButtonStyle(btn, conv, btn == conversionBtn);
+                            break;
+                        }
+                    }
+                }
+            }
+            showConversionDetails(conversion);
+        });
         
         // Add right-click menu
         addContextMenu(conversionBtn, conversion);
@@ -416,90 +433,59 @@ public class ProjectFrame extends JFrame {
         conversionListPanel.add(Box.createVerticalStrut(5));
     }
 
-    private void addProgressIndicator(JButton conversionBtn, Conversion conversion) {
-        JProgressBar progress = new JProgressBar(0, 100);
-        progress.setPreferredSize(new Dimension(conversionBtn.getWidth(), 3));
-        progress.setForeground(Theme.ACCENT);
-        progress.setBackground(Theme.SURFACE);
-        progress.setBorderPainted(false);
+    private void updateConversionButtonStyle(JButton button, Conversion conversion, boolean isSelected) {
+        Color statusColor = conversion.getStatusColor();
         
-        // Use existing status property to determine progress
-        int progressValue = 0;
-        switch (conversion.status) {
-            case COMPLETED:
-                progressValue = 100;
-                break;
-            case IN_PROGRESS:
-                progressValue = 50;
-                break;
-            case BASIC_EDITING:
-                progressValue = 75;
-                break;
-            case DAMAGED:
-                progressValue = 0;
-                break;
-            case NOT_STARTED:
-                progressValue = 0;
-                break;
-            default:
-                progressValue = 0;
-                break;
+        if (isSelected) {
+            // Selected state
+            button.setBackground(Theme.ACCENT.darker());
+            button.setForeground(Color.WHITE); // White text for better contrast on dark background
+            button.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 3, 0, 0, statusColor),
+                BorderFactory.createEmptyBorder(0, 7, 0, 10)
+            ));
+        } else {
+            // Normal state
+            button.setBackground(Theme.SURFACE);
+            button.setForeground(statusColor.brighter()); // Status color for text
+            button.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         }
-        progress.setValue(progressValue);
         
-        JPanel btnPanel = new JPanel(new BorderLayout());
-        btnPanel.setOpaque(false);
-        btnPanel.add(conversionBtn, BorderLayout.CENTER);
-        btnPanel.add(progress, BorderLayout.SOUTH);
-        
-        conversionListPanel.add(btnPanel);
-    }
-
-    private void addContextMenu(JButton conversionBtn, Conversion conversion) {
-        JPopupMenu contextMenu = new JPopupMenu();
-        
-        JMenuItem duplicate = new JMenuItem("Duplicate");
-        JMenuItem delete = new JMenuItem("Delete");
-        JMenuItem export = new JMenuItem("Export Details");
-        
-        duplicate.addActionListener(e -> {
-            // Duplicate conversion logic
-        });
-        
-        delete.addActionListener(e -> {
-            // Delete conversion logic
-        });
-        
-        export.addActionListener(e -> {
-            // Export conversion details logic
-        });
-        
-        contextMenu.add(duplicate);
-        contextMenu.add(delete);
-        contextMenu.addSeparator();
-        contextMenu.add(export);
-        
-        conversionBtn.addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
+        // Hover effect
+        button.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                if (!isSelected) {
+                    button.setBackground(Theme.SURFACE.brighter());
                 }
             }
-            public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
+            public void mouseExited(MouseEvent e) {
+                if (!isSelected) {
+                    button.setBackground(Theme.SURFACE);
                 }
             }
         });
     }
 
     private void updateButtonColors() {
+        Component selectedComponent = null;
+        
+        // Find currently selected button
+        for (Component c : conversionListPanel.getComponents()) {
+            if (c instanceof JButton && c.getBackground().equals(Theme.ACCENT.darker())) {
+                selectedComponent = c;
+                break;
+            }
+        }
+        
+        // Update all buttons
         for (Component c : conversionListPanel.getComponents()) {
             if (c instanceof JButton) {
                 JButton btn = (JButton) c;
-                for (Conversion conversion : project.getConversions()) {
-                    if (btn.getText().equals(conversion.name)) {
-                        btn.setForeground(conversion.getStatusColor());
+                // Find matching conversion for this button
+                for (Conversion conv : project.getConversions()) {
+                    if (btn.getText().equals(conv.name)) {
+                        updateConversionButtonStyle(btn, conv, c == selectedComponent);
+                        break; // Found the matching conversion, no need to continue inner loop
                     }
                 }
             }
@@ -539,6 +525,7 @@ public class ProjectFrame extends JFrame {
     public void saveProject() {
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
         updateButtonColors();
+        updateStatusBar();
     }
 
     private void addResizeBorder(JPanel mainPanel) {
@@ -656,27 +643,48 @@ public class ProjectFrame extends JFrame {
         Theme.stylePanel(statusBar);
         statusBar.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10));
         
-        JLabel statusLabel = new JLabel("Ready");
-        statusLabel.setForeground(Theme.TEXT_SECONDARY);
-        statusLabel.setFont(Theme.SMALL_FONT);
+        JLabel progressLabel = new JLabel();
+        progressLabel.setForeground(Theme.TEXT_SECONDARY);
+        progressLabel.setFont(Theme.SMALL_FONT);
         
-        JLabel statsLabel = new JLabel();
-        statsLabel.setForeground(Theme.TEXT_SECONDARY);
-        statsLabel.setFont(Theme.SMALL_FONT);
-        updateStatsLabel(statsLabel);
+        JLabel durationLabel = new JLabel();
+        durationLabel.setForeground(Theme.TEXT_SECONDARY);
+        durationLabel.setFont(Theme.SMALL_FONT);
         
-        statusBar.add(statusLabel, BorderLayout.WEST);
-        statusBar.add(statsLabel, BorderLayout.EAST);
+        statusBar.add(progressLabel, BorderLayout.WEST);
+        statusBar.add(durationLabel, BorderLayout.EAST);
         
         contentPanel.add(statusBar, BorderLayout.SOUTH);
+        
+        // Initial update
+        updateStatusBar();
     }
 
-    private void updateStatsLabel(JLabel statsLabel) {
-        int total = project.getConversions().size();
-        long completed = project.getConversions().stream()
-            .filter(c -> c.status.equals("Completed"))
-            .count();
-        statsLabel.setText(String.format("Completed: %d/%d", completed, total));
+    private void updateStatusBar() {
+        if (statusBar != null) {
+            int total = project.getConversions().size();
+            long completed = project.getConversions().stream()
+                .filter(c -> c.status == ConversionStatus.COMPLETED)
+                .count();
+            
+            // Create progress info
+            String progressText = String.format("Completed: %d/%d (%.1f%%)", 
+                completed, total, (completed * 100.0) / Math.max(1, total));
+            
+            // Calculate total duration
+            Duration totalDuration = project.getConversions().stream()
+                .map(c -> c.duration)
+                .reduce(Duration.ZERO, Duration::plus);
+                
+            String durationText = String.format("Total Duration: %s", formatDuration(totalDuration));
+            
+            // Update status bar labels
+            Component[] components = statusBar.getComponents();
+            if (components.length >= 2) {
+                ((JLabel)components[0]).setText(progressText);
+                ((JLabel)components[1]).setText(durationText);
+            }
+        }
     }
 
     private void addQuickActionBar(JPanel sidebar) {
@@ -732,46 +740,132 @@ public class ProjectFrame extends JFrame {
     }
 
     private void showMediaStatistics() {
-        Map<com.thevideogoat.digitizingassistant.data.Type, Integer> mediaCount = new HashMap<>();
-        Map<com.thevideogoat.digitizingassistant.data.Type, Duration> totalDuration = new HashMap<>();
-        
-        // Calculate statistics
-        for (Conversion conversion : project.getConversions()) {
-            mediaCount.merge(conversion.type, 1, Integer::sum);
-            totalDuration.merge(conversion.type, conversion.duration, Duration::plus);
-        }
-        
-        // Create statistics panel
+        // Create scrollable statistics panel
         JPanel statsPanel = new JPanel(new GridBagLayout());
+        statsPanel.setBackground(Color.WHITE);
+        statsPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
         gbc.gridy = 0;
         gbc.anchor = GridBagConstraints.WEST;
         gbc.insets = new Insets(5, 5, 5, 5);
         
-        // Add headers
-        statsPanel.add(new JLabel("Media Type"), gbc);
-        gbc.gridx++;
-        statsPanel.add(new JLabel("Quantity"), gbc);
-        gbc.gridx++;
-        statsPanel.add(new JLabel("Total Duration"), gbc);
+        // Project Overview Section
+        JLabel overviewHeader = new JLabel("Media Statistics");
+        overviewHeader.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 16));
+        overviewHeader.setForeground(Color.BLACK);
+        statsPanel.add(overviewHeader, gbc);
         
-        // Add data rows
-        for (Type type : Type.values()) {
-            gbc.gridy++;
-            gbc.gridx = 0;
-            statsPanel.add(new JLabel(type.toString()), gbc);
-            gbc.gridx++;
-            statsPanel.add(new JLabel(String.valueOf(mediaCount.getOrDefault(type, 0))), gbc);
-            gbc.gridx++;
-            Duration duration = totalDuration.getOrDefault(type, Duration.ZERO);
-            statsPanel.add(new JLabel(formatDuration(duration)), gbc);
+        // Calculate statistics
+        int totalConversions = project.getConversions().size();
+        long completedCount = project.getConversions().stream()
+            .filter(c -> c.status == ConversionStatus.COMPLETED)
+            .count();
+        Duration totalDuration = project.getConversions().stream()
+            .map(c -> c.duration)
+            .reduce(Duration.ZERO, Duration::plus);
+        
+        // Count files and directories
+        int totalFiles = 0;
+        int totalDirs = 0;
+        int totalSubDirs = 0;
+        
+        for (Conversion conversion : project.getConversions()) {
+            if (conversion.linkedFiles != null) {
+                for (File file : conversion.linkedFiles) {
+                    if (file.isDirectory()) {
+                        totalDirs++;
+                        // Count subdirectories
+                        totalSubDirs += countSubdirectories(file);
+                    } else {
+                        totalFiles++;
+                    }
+                }
+            }
         }
         
+        // Media Type Statistics
+        Map<com.thevideogoat.digitizingassistant.data.Type, Integer> mediaTypeStats = new HashMap<>();
+        Map<com.thevideogoat.digitizingassistant.data.Type, Duration> typeDurations = new HashMap<>();
+        for (Conversion conversion : project.getConversions()) {
+            mediaTypeStats.merge(conversion.type, 1, Integer::sum);
+            typeDurations.merge(conversion.type, conversion.duration, Duration::plus);
+        }
+        
+        // Add Overview Statistics
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        addStatRow(statsPanel, gbc, "Total Conversions", String.format("%d (%d completed)", 
+            totalConversions, completedCount));
+        addStatRow(statsPanel, gbc, "Total Duration", formatDuration(totalDuration));
+        addStatRow(statsPanel, gbc, "Linked Files", String.format("%d files, %d directories", 
+            totalFiles, totalDirs));
+        
+        if (totalSubDirs > 0) {
+            addStatRow(statsPanel, gbc, "Subdirectories", String.valueOf(totalSubDirs));
+        }
+        
+        // Media Type Breakdown
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        JLabel typeHeader = new JLabel("Media Type Breakdown");
+        typeHeader.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 14));
+        typeHeader.setForeground(Color.BLACK);
+        statsPanel.add(typeHeader, gbc);
+        
+        // Add type statistics
+        for (com.thevideogoat.digitizingassistant.data.Type type : com.thevideogoat.digitizingassistant.data.Type.values()) {
+            int count = mediaTypeStats.getOrDefault(type, 0);
+            if (count > 0) {
+                Duration typeDuration = typeDurations.getOrDefault(type, Duration.ZERO);
+                String statValue = String.format("%d items, %s", count, formatDuration(typeDuration));
+                addStatRow(statsPanel, gbc, type.toString(), statValue);
+            }
+        }
+        
+        // Create scrollable container
+        JScrollPane scrollPane = new JScrollPane(statsPanel);
+        scrollPane.setPreferredSize(new Dimension(400, Math.min(500, statsPanel.getPreferredSize().height + 50)));
+        scrollPane.setBorder(null);
+        
+        // Show dialog
         JOptionPane.showMessageDialog(this,
-            statsPanel,
+            scrollPane,
             "Media Statistics",
             JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private void addStatRow(JPanel panel, GridBagConstraints gbc, String label, String value) {
+        gbc.gridy++;
+        gbc.gridx = 0;
+        gbc.gridwidth = 1;
+        gbc.insets = new Insets(5, 20, 5, 20);
+        
+        JLabel statLabel = new JLabel(label + ":");
+        statLabel.setForeground(Color.BLACK);
+        panel.add(statLabel, gbc);
+        
+        gbc.gridx = 1;
+        JLabel statValue = new JLabel(value);
+        statValue.setForeground(Color.BLACK);
+        panel.add(statValue, gbc);
+    }
+
+    private int countSubdirectories(File directory) {
+        int count = 0;
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    count++;
+                    count += countSubdirectories(file);
+                }
+            }
+        }
+        return count;
     }
 
     private String formatDuration(Duration duration) {
@@ -801,33 +895,61 @@ public class ProjectFrame extends JFrame {
         conversionListPanel.repaint();
     }
 
-    private void showProjectSettings() {
-        JDialog settingsDialog = new JDialog(this, "Project Settings", true);
-        settingsDialog.setLayout(new BorderLayout());
+    private void addContextMenu(JButton conversionBtn, Conversion conversion) {
+        JPopupMenu contextMenu = new JPopupMenu();
         
-        JPanel settingsPanel = new JPanel(new GridBagLayout());
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(5, 5, 5, 5);
+        JMenuItem duplicate = new JMenuItem("Duplicate");
+        JMenuItem delete = new JMenuItem("Delete");
         
-        // Add read-only project info
-        settingsPanel.add(new JLabel("Project Name:"), gbc);
-        gbc.gridx = 1;
-        JLabel projectNameLabel = new JLabel(project.getName());
-        settingsPanel.add(projectNameLabel, gbc);
+        duplicate.addActionListener(e -> {
+            Conversion newConversion = new Conversion(conversion.name + " (Copy)");
+            newConversion.type = conversion.type;
+            newConversion.note = conversion.note;
+            newConversion.status = conversion.status;
+            newConversion.duration = conversion.duration;
+            project.getConversions().add(newConversion);
+            addConversionToSidebar(newConversion);
+            saveProject();
+        });
         
-        // Add close button
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton closeButton = new JButton("Close");
-        closeButton.addActionListener(e -> settingsDialog.dispose());
-        buttonPanel.add(closeButton);
+        delete.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to delete this conversion?\nThis action cannot be undone.",
+                "Confirm Delete",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                conversionListPanel.remove(conversionBtn);
+                project.getConversions().remove(conversion);
+                conversionListPanel.revalidate();
+                conversionListPanel.repaint();
+                saveProject();
+                
+                // Clear details panel if the deleted conversion was selected
+                if (detailsPanel.getComponentCount() > 0 && 
+                    detailsPanel.getComponent(0) instanceof JScrollPane &&
+                    ((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView() instanceof ConversionPanel &&
+                    ((ConversionPanel)((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView()).conversion == conversion) {
+                    displayTempContentPanel();
+                }
+            }
+        });
         
-        settingsDialog.add(settingsPanel, BorderLayout.CENTER);
-        settingsDialog.add(buttonPanel, BorderLayout.SOUTH);
-        settingsDialog.pack();
-        settingsDialog.setLocationRelativeTo(this);
-        settingsDialog.setVisible(true);
+        contextMenu.add(duplicate);
+        contextMenu.add(delete);
+        
+        conversionBtn.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent me) {
+                if (SwingUtilities.isRightMouseButton(me)) {
+                    contextMenu.show(conversionBtn, me.getX(), me.getY());
+                }
+            }
+            public void mouseReleased(MouseEvent me) {
+                if (SwingUtilities.isRightMouseButton(me)) {
+                    contextMenu.show(conversionBtn, me.getX(), me.getY());
+                }
+            }
+        });
     }
 }
