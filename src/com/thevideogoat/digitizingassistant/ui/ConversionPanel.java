@@ -9,10 +9,16 @@ import javax.swing.*;
 import javax.swing.border.BevelBorder;
 import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
+import java.awt.Desktop;
 import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -127,6 +133,237 @@ public class ConversionPanel extends JPanel {
 
         filesList = new JList<>();
         Theme.styleList(filesList);
+        
+        // Add right-click menu for files
+        JPopupMenu fileMenu = new JPopupMenu();
+        
+        JMenuItem openFile = new JMenuItem("Open File");
+        openFile.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                if (!selectedFile.exists()) {
+                    int choice = JOptionPane.showConfirmDialog(this,
+                        "File not found: " + selectedFile.getAbsolutePath() + "\n\nWould you like to relink this file?",
+                        "File Not Found",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.ERROR_MESSAGE);
+                    
+                    if (choice == JOptionPane.YES_OPTION) {
+                        JFileChooser fileChooser = new JFileChooser();
+                        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                        fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                        
+                        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File newLocation = fileChooser.getSelectedFile();
+                            File newFile = new File(newLocation, selectedFile.getName());
+                            
+                            if (newFile.exists()) {
+                                int index = conversion.linkedFiles.indexOf(selectedFile);
+                                if (index != -1) {
+                                    conversion.linkedFiles.set(index, newFile);
+                                    updateLinkedFiles();
+                                    projectFrame.markUnsavedChanges();
+                                    JOptionPane.showMessageDialog(this,
+                                        "File relinked successfully.",
+                                        "Success",
+                                        JOptionPane.INFORMATION_MESSAGE);
+                                    
+                                    // Try opening the file again after relinking
+                                    try {
+                                        Desktop.getDesktop().open(newFile);
+                                    } catch (IOException ex) {
+                                        JOptionPane.showMessageDialog(this,
+                                            "Could not open file: " + ex.getMessage(),
+                                            "Error",
+                                            JOptionPane.ERROR_MESSAGE);
+                                    }
+                                }
+                            } else {
+                                JOptionPane.showMessageDialog(this,
+                                    "Could not find file at new location.",
+                                    "Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                            }
+                        }
+                    }
+                } else {
+                    try {
+                        Desktop.getDesktop().open(selectedFile);
+                    } catch (IOException ex) {
+                        JOptionPane.showMessageDialog(this,
+                            "Could not open file: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+        
+        JMenuItem showInExplorer = new JMenuItem("Show in Explorer");
+        showInExplorer.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                if (!selectedFile.exists()) {
+                    int choice = JOptionPane.showConfirmDialog(this,
+                        "File not found: " + selectedFile.getAbsolutePath() + "\n\nWould you like to relink this file?",
+                        "File Not Found",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.ERROR_MESSAGE);
+                    
+                    if (choice == JOptionPane.YES_OPTION) {
+                        JFileChooser fileChooser = new JFileChooser();
+                        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                        fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                        
+                        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                            File newLocation = fileChooser.getSelectedFile();
+                            File newFile = new File(newLocation, selectedFile.getName());
+                            
+                            if (newFile.exists()) {
+                                int index = conversion.linkedFiles.indexOf(selectedFile);
+                                if (index != -1) {
+                                    conversion.linkedFiles.set(index, newFile);
+                                    updateLinkedFiles();
+                                    projectFrame.markUnsavedChanges();
+                                    JOptionPane.showMessageDialog(this,
+                                        "File relinked successfully.",
+                                        "Success",
+                                        JOptionPane.INFORMATION_MESSAGE);
+                                    
+                                    // Try showing in explorer again after relinking
+                                    try {
+                                        Desktop.getDesktop().open(newFile.getParentFile());
+                                    } catch (IOException ex) {
+                                        JOptionPane.showMessageDialog(this,
+                                            "Could not open file location: " + ex.getMessage(),
+                                            "Error",
+                                            JOptionPane.ERROR_MESSAGE);
+                                    }
+                                }
+                            } else {
+                                JOptionPane.showMessageDialog(this,
+                                    "Could not find file at new location.",
+                                    "Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                            }
+                        }
+                    }
+                } else {
+                    try {
+                        Desktop.getDesktop().open(selectedFile.getParentFile());
+                    } catch (IOException ex) {
+                        JOptionPane.showMessageDialog(this,
+                            "Could not open file location: " + ex.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+        
+        JMenuItem copyPath = new JMenuItem("Copy Path");
+        copyPath.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                StringSelection stringSelection = new StringSelection(selectedFile.getAbsolutePath());
+                Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+                clipboard.setContents(stringSelection, null);
+            }
+        });
+        
+        JMenuItem renameFile = new JMenuItem("Rename File");
+        renameFile.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                String newName = JOptionPane.showInputDialog(this,
+                    "Enter new name:",
+                    "Rename File",
+                    JOptionPane.PLAIN_MESSAGE,
+                    null,
+                    null,
+                    selectedFile.getName()).toString();
+                
+                if (newName != null && !newName.trim().isEmpty()) {
+                    File newFile = new File(selectedFile.getParentFile(), newName);
+                    if (selectedFile.renameTo(newFile)) {
+                        int index = conversion.linkedFiles.indexOf(selectedFile);
+                        if (index != -1) {
+                            conversion.linkedFiles.set(index, newFile);
+                            updateLinkedFiles();
+                            projectFrame.markUnsavedChanges();
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(this,
+                            "Could not rename file. Make sure the file is not in use.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+        
+        JMenuItem relinkMedia = new JMenuItem("Relink Media");
+        relinkMedia.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                
+                if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                    File newLocation = fileChooser.getSelectedFile();
+                    File newFile = new File(newLocation, selectedFile.getName());
+                    
+                    if (newFile.exists()) {
+                        int index = conversion.linkedFiles.indexOf(selectedFile);
+                        if (index != -1) {
+                            conversion.linkedFiles.set(index, newFile);
+                            updateLinkedFiles();
+                            projectFrame.markUnsavedChanges();
+                            JOptionPane.showMessageDialog(this,
+                                "File relinked successfully.",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(this,
+                            "Could not find file at new location.",
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    }
+                }
+            }
+        });
+        
+        JMenuItem removeFile = new JMenuItem("Remove File");
+        removeFile.addActionListener(e -> {
+            File selectedFile = filesList.getSelectedValue();
+            if (selectedFile != null) {
+                conversion.linkedFiles.remove(selectedFile);
+                updateLinkedFiles();
+                projectFrame.markUnsavedChanges();
+            }
+        });
+        
+        fileMenu.add(openFile);
+        fileMenu.add(showInExplorer);
+        fileMenu.add(copyPath);
+        fileMenu.addSeparator();
+        fileMenu.add(renameFile);
+        fileMenu.add(relinkMedia);
+        fileMenu.add(removeFile);
+        
+        filesList.addMouseListener(new MouseAdapter() {
+            public void mousePressed(MouseEvent me) {
+                if (SwingUtilities.isRightMouseButton(me)) {
+                    int index = filesList.locationToIndex(me.getPoint());
+                    if (index != -1) {
+                        filesList.setSelectedIndex(index);
+                        fileMenu.show(filesList, me.getX(), me.getY());
+                    }
+                }
+            }
+        });
         
         JScrollPane scrollPane = new JScrollPane(filesList);
         Theme.styleScrollPane(scrollPane);
@@ -456,7 +693,7 @@ public class ConversionPanel extends JPanel {
                     }
                 }
                 updateLinkedFiles();
-                projectFrame.saveProject();
+                projectFrame.markUnsavedChanges();
             }
         });
 
@@ -466,6 +703,7 @@ public class ConversionPanel extends JPanel {
             mmSpinner.setValue(now.getMonthValue());
             ddSpinner.setValue(now.getDayOfMonth());
             yyyySpinner.setValue(now.getYear());
+            projectFrame.markUnsavedChanges();
         });
 
         // Update Time button
@@ -478,31 +716,12 @@ public class ConversionPanel extends JPanel {
             hhSpinner.setValue(hour);
             minSpinner.setValue(now.getMinute());
             amPmSelector.setSelectedItem(amPm);
+            projectFrame.markUnsavedChanges();
         });
 
         // Save button
         saveBtn.addActionListener(e -> {
-            // Update conversion properties
-            conversion.type = (Type) typeSelector.getSelectedItem();
-            conversion.note = noteField.getText();
-            conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
-            
-            // Update date - format numbers to ensure two digits
-            conversion.dateOfConversion.month = String.format("%02d", (Integer)mmSpinner.getValue());
-            conversion.dateOfConversion.day = String.format("%02d", (Integer)ddSpinner.getValue());
-            conversion.dateOfConversion.year = String.format("%04d", (Integer)yyyySpinner.getValue());
-            
-            // Update time - format numbers to ensure two digits
-            conversion.timeOfConversion.hour = String.format("%02d", (Integer)hhSpinner.getValue());
-            conversion.timeOfConversion.minute = String.format("%02d", (Integer)minSpinner.getValue());
-            conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
-            
-            // Update duration if visible
-            if (tapeDurationRow.isVisible()) {
-                int minutes = (Integer) tapeDurationSpinner.getValue();
-                conversion.duration = Duration.ofMinutes(minutes);
-            }
-            
+            updateConversion();
             projectFrame.saveProject();
             JOptionPane.showMessageDialog(this, 
                 "Changes saved successfully.", 
@@ -522,6 +741,36 @@ public class ConversionPanel extends JPanel {
                 projectFrame.remove(this);
             }
         });
+
+        // type selector
+        typeSelector.addActionListener(e -> {
+            projectFrame.markUnsavedChanges();
+        });
+
+        // note field
+        noteField.getDocument().addDocumentListener(new DocumentListener() {
+            public void changedUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+            public void removeUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+            public void insertUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+        });
+
+        // status selector
+        statusSelector.addActionListener(e -> {
+            projectFrame.markUnsavedChanges();
+        });
+
+        // date spinners
+        mmSpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
+        ddSpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
+        yyyySpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
+
+        // time spinners
+        hhSpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
+        minSpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
+        amPmSelector.addActionListener(e -> projectFrame.markUnsavedChanges());
+
+        // tape duration spinner
+        tapeDurationSpinner.addChangeListener(e -> projectFrame.markUnsavedChanges());
     }
 
     private void updateLinkedFiles(){
@@ -614,6 +863,30 @@ public class ConversionPanel extends JPanel {
                     setBackground(new Color(40, 167, 69)); // Bootstrap success green
                     break;
             }
+        }
+    }
+
+    // Add this method to update conversion data
+    public void updateConversion() {
+        // Update conversion properties
+        conversion.type = (Type) typeSelector.getSelectedItem();
+        conversion.note = noteField.getText();
+        conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
+        
+        // Update date - format numbers to ensure two digits
+        conversion.dateOfConversion.month = String.format("%02d", (Integer)mmSpinner.getValue());
+        conversion.dateOfConversion.day = String.format("%02d", (Integer)ddSpinner.getValue());
+        conversion.dateOfConversion.year = String.format("%04d", (Integer)yyyySpinner.getValue());
+        
+        // Update time - format numbers to ensure two digits
+        conversion.timeOfConversion.hour = String.format("%02d", (Integer)hhSpinner.getValue());
+        conversion.timeOfConversion.minute = String.format("%02d", (Integer)minSpinner.getValue());
+        conversion.timeOfConversion.am_pm = (String) amPmSelector.getSelectedItem();
+        
+        // Update duration if visible
+        if (tapeDurationRow.isVisible()) {
+            int minutes = (Integer) tapeDurationSpinner.getValue();
+            conversion.duration = Duration.ofMinutes(minutes);
         }
     }
 

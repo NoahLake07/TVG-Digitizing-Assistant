@@ -132,4 +132,19 @@ public class Theme {
             tf.setCaretColor(TEXT);
         }
     }
+
+    public static void styleMenuItem(JMenuItem menuItem) {
+        menuItem.setBackground(SURFACE);
+        menuItem.setForeground(TEXT);
+        menuItem.setFont(NORMAL_FONT);
+        menuItem.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        
+        menuItem.addChangeListener(e -> {
+            if (menuItem.isArmed()) {
+                menuItem.setBackground(ACCENT);
+            } else {
+                menuItem.setBackground(SURFACE);
+            }
+        });
+    }
 }

@@ -21,10 +21,17 @@ import java.awt.event.MouseMotionListener;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.FileOutputStream;
+import java.io.ObjectOutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.stream.Stream;
 
 public class ProjectFrame extends JFrame {
 
@@ -36,6 +43,9 @@ public class ProjectFrame extends JFrame {
     private Point mouseDownCompCoords;
     private JPanel statusBar;
     private JButton newConversion;
+    private JLabel saveStatusLabel;
+    private Timer saveStatusTimer;
+    private boolean hasUnsavedChanges = false;
 
     public ProjectFrame(Project project) {
         super();
@@ -45,6 +55,13 @@ public class ProjectFrame extends JFrame {
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         DigitizingAssistant.setIcon(this);
+
+        // Initialize save status timer
+        saveStatusTimer = new Timer(3000, e -> {
+            saveStatusLabel.setText("");
+            saveStatusTimer.stop();
+        });
+        saveStatusTimer.setRepeats(false);
 
         // Main container with modern styling
         JPanel mainPanel = new JPanel(new BorderLayout());
@@ -116,17 +133,292 @@ public class ProjectFrame extends JFrame {
         JMenuItem exportProject = new JMenuItem("Export Project as JSON");
         JMenuItem mediaStats = new JMenuItem("Media Statistics");
         JMenuItem relinkTrimmed = new JMenuItem("Relink to Trimmed Files");
+        JMenuItem findAndRelinkTrimmed = new JMenuItem("Find and Relink Trimmed Media");
+        JMenuItem renameProjectFiles = new JMenuItem("Rename Project Files");
+        JMenuItem openProjectFolder = new JMenuItem("Open Project Folder");
         
         refreshList.addActionListener(e -> refreshConversionList());
         exportProject.addActionListener(e -> exportProjectAsJson());
         mediaStats.addActionListener(e -> showMediaStatistics());
         relinkTrimmed.addActionListener(e -> Util.relinkToTrimmedFiles(project));
+        findAndRelinkTrimmed.addActionListener(e -> {
+            ArrayList<File> allFiles = Util.getLinkedFiles(project);
+            if (allFiles.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "No files are linked to search for trimmed versions.",
+                    "No Files",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Get all unique parent directories
+            Set<File> parentDirs = new HashSet<>();
+            for (File file : allFiles) {
+                parentDirs.add(file.getParentFile());
+            }
+            
+            // Search each parent directory and its subdirectories
+            Map<File, File> trimmedFileMap = new HashMap<>();
+            for (File parentDir : parentDirs) {
+                if (parentDir != null && parentDir.exists()) {
+                    searchForTrimmedFiles(parentDir, allFiles, trimmedFileMap);
+                }
+            }
+            
+            if (trimmedFileMap.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "No trimmed versions of files were found in any subdirectories.",
+                    "No Trimmed Files Found",
+                    JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            // Show preview of files to be relinked
+            StringBuilder preview = new StringBuilder("Found the following trimmed files:\n\n");
+            for (Map.Entry<File, File> entry : trimmedFileMap.entrySet()) {
+                preview.append(entry.getKey().getName())
+                      .append(" → ")
+                      .append(entry.getValue().getName())
+                      .append("\n");
+            }
+            preview.append("\nWould you like to relink to these trimmed files?");
+            
+            int choice = JOptionPane.showConfirmDialog(this,
+                preview.toString(),
+                "Relink to Trimmed Files",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                // Log the start of the operation
+                logFileOperation("START RELINK OPERATION", "Relinking " + trimmedFileMap.size() + " files to their trimmed versions");
+                
+                // Relink the files
+                for (Map.Entry<File, File> entry : trimmedFileMap.entrySet()) {
+                    File originalFile = entry.getKey();
+                    File trimmedFile = entry.getValue();
+                    
+                    // Find and update the file in all conversions
+                    for (Conversion c : project.getConversions()) {
+                        int index = c.linkedFiles.indexOf(originalFile);
+                        if (index != -1) {
+                            c.linkedFiles.set(index, trimmedFile);
+                            // Log each relink operation
+                            logFileOperation("RELINK", 
+                                "Original: " + originalFile.getAbsolutePath() + 
+                                " → New: " + trimmedFile.getAbsolutePath() +
+                                " (Conversion: " + c.name + ")");
+                        }
+                    }
+                }
+                markUnsavedChanges();
+                
+                // Log the completion
+                logFileOperation("END RELINK OPERATION", "Successfully relinked " + trimmedFileMap.size() + " files");
+                
+                JOptionPane.showMessageDialog(this,
+                    "Successfully relinked to trimmed files.\nA log file has been created in the logs directory.",
+                    "Success",
+                    JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        renameProjectFiles.addActionListener(e -> {
+            // Create options dialog
+            String[] options = {
+                "Rename to conversion names",
+                "Rename to conversion notes",
+                "Custom name...",
+                "Cancel"
+            };
+            
+            // Create checkbox for subdirectories
+            JCheckBox includeSubdirs = new JCheckBox("Include files in subdirectories", false);
+            includeSubdirs.setToolTipText("If checked, files in subdirectories will also be renamed.");
+            
+            // Create preserve numbering checkbox
+            JCheckBox preserveNumbering = new JCheckBox("Preserve existing numbering", false);
+            preserveNumbering.setToolTipText("If checked, will try to maintain any existing numbers in filenames.");
+            
+            // Create custom dialog
+            JPanel dialogPanel = new JPanel();
+            dialogPanel.setLayout(new BoxLayout(dialogPanel, BoxLayout.Y_AXIS));
+            dialogPanel.add(new JLabel("Select rename option:"));
+            dialogPanel.add(Box.createVerticalStrut(10));
+            dialogPanel.add(includeSubdirs);
+            dialogPanel.add(Box.createVerticalStrut(5));
+            dialogPanel.add(preserveNumbering);
+            
+            int renameChoice = JOptionPane.showOptionDialog(
+                this,
+                dialogPanel,
+                "Project Rename Options",
+                JOptionPane.DEFAULT_OPTION,
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                options,
+                options[0]
+            );
+            
+            if (renameChoice == 3 || renameChoice == JOptionPane.CLOSED_OPTION) return; // User cancelled
+            
+            // Get all files in the project
+            ArrayList<File> allFiles = Util.getLinkedFiles(project);
+            if (allFiles.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "No files are linked to rename.",
+                    "No Files",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // Show one confirmation dialog for the entire operation
+            int confirm = JOptionPane.showConfirmDialog(this,
+                String.format("This will rename %d file(s) in the project. Continue?", allFiles.size()),
+                "Confirm Bulk Rename",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                String operationType = "";
+                if (renameChoice == 0) {
+                    operationType = "conversion names";
+                } else if (renameChoice == 1) {
+                    operationType = "conversion notes";
+                } else if (renameChoice == 2) {
+                    String newName = JOptionPane.showInputDialog(this,
+                        "Enter custom name:",
+                        "Custom Filename",
+                        JOptionPane.PLAIN_MESSAGE);
+                    if (newName == null || newName.trim().isEmpty()) {
+                        return;
+                    }
+                    operationType = "custom name: " + newName;
+                }
+                
+                logFileOperation("START RENAME OPERATION", 
+                    "Renaming " + allFiles.size() + " files using option: " + operationType);
+                
+                if (renameChoice == 0) {
+                    // Rename to conversion names
+                    for (Conversion c : project.getConversions()) {
+                        if (!c.linkedFiles.isEmpty()) {
+                            ArrayList<File> originalFiles = new ArrayList<>(c.linkedFiles);
+                            Util.renameFilesWithOptions(
+                                c.linkedFiles,
+                                c.name,
+                                includeSubdirs.isSelected(),
+                                preserveNumbering.isSelected()
+                            );
+                            updateLinkedFilesAfterRename(c, c.name);
+                            for (int i = 0; i < originalFiles.size(); i++) {
+                                logFileOperation("RENAME", 
+                                    "Original: " + originalFiles.get(i).getAbsolutePath() + 
+                                    " → New: " + c.linkedFiles.get(i).getAbsolutePath() +
+                                    " (Conversion: " + c.name + ")");
+                            }
+                        }
+                    }
+                } else if (renameChoice == 1) {
+                    // Rename to conversion notes
+                    for (Conversion c : project.getConversions()) {
+                        if (!c.linkedFiles.isEmpty() && !c.note.isEmpty()) {
+                            ArrayList<File> originalFiles = new ArrayList<>(c.linkedFiles);
+                            Util.renameFilesWithOptions(
+                                c.linkedFiles,
+                                c.note,
+                                includeSubdirs.isSelected(),
+                                preserveNumbering.isSelected()
+                            );
+                            updateLinkedFilesAfterRename(c, c.note);
+                            for (int i = 0; i < originalFiles.size(); i++) {
+                                logFileOperation("RENAME", 
+                                    "Original: " + originalFiles.get(i).getAbsolutePath() + 
+                                    " → New: " + c.linkedFiles.get(i).getAbsolutePath() +
+                                    " (Conversion: " + c.name + ")");
+                            }
+                        }
+                    }
+                } else if (renameChoice == 2) {
+                    // Custom name
+                    String newName = JOptionPane.showInputDialog(this,
+                        "Enter custom name:",
+                        "Custom Filename",
+                        JOptionPane.PLAIN_MESSAGE);
+                    if (newName != null && !newName.trim().isEmpty()) {
+                        ArrayList<File> originalFiles = new ArrayList<>(allFiles);
+                        Util.renameFilesWithOptions(
+                            allFiles,
+                            newName,
+                            includeSubdirs.isSelected(),
+                            preserveNumbering.isSelected()
+                        );
+                        // Update all conversions' linkedFiles
+                        for (Conversion c : project.getConversions()) {
+                            updateLinkedFilesAfterRename(c, newName);
+                        }
+                        for (int i = 0; i < originalFiles.size(); i++) {
+                            logFileOperation("RENAME", 
+                                "Original: " + originalFiles.get(i).getAbsolutePath() + 
+                                " → New: " + allFiles.get(i).getAbsolutePath());
+                        }
+                    }
+                }
+                
+                logFileOperation("END RENAME OPERATION", "Successfully renamed " + allFiles.size() + " files");
+                
+                JOptionPane.showMessageDialog(this,
+                    "Successfully renamed files.\nA log file has been created in the logs directory.",
+                    "Success",
+                    JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        
+        // Add menu item for relinking by conversion note
+        JMenuItem relinkByNote = new JMenuItem("Relink by Conversion Note");
+        relinkByNote.addActionListener(e -> {
+            // Gather all files in project directories
+            ArrayList<File> allFiles = getAllFilesInProjectDirectories();
+            int relinked = 0;
+            for (Conversion c : project.getConversions()) {
+                String noteNorm = normalizeFilename(c.note);
+                for (File f : allFiles) {
+                    String fileNorm = normalizeFilename(f.getName());
+                    if (!noteNorm.isEmpty() && fileNorm.contains(noteNorm)) {
+                        c.linkedFiles.clear();
+                        c.linkedFiles.add(f);
+                        relinked++;
+                        logFileOperation("RELINK BY NOTE", "Linked conversion '" + c.name + "' to file: " + f.getAbsolutePath());
+                        break;
+                    }
+                }
+            }
+            JOptionPane.showMessageDialog(this,
+                "Relinked " + relinked + " conversions by note.",
+                "Relink by Note",
+                JOptionPane.INFORMATION_MESSAGE);
+        });
+        menu.add(relinkByNote);
+        
+        openProjectFolder.addActionListener(e -> {
+            try {
+                Desktop.getDesktop().open(DigitizingAssistant.PROJECTS_DIRECTORY);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Could not open project folder: " + ex.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        });
         
         menu.add(refreshList);
         menu.add(exportProject);
         menu.addSeparator();
         menu.add(mediaStats);
         menu.add(relinkTrimmed);
+        menu.add(findAndRelinkTrimmed);
+        menu.add(renameProjectFiles);
+        menu.addSeparator();
+        menu.add(openProjectFolder);
         
         menuButton.addActionListener(e -> {
             menu.show(menuButton, 0, menuButton.getHeight());
@@ -216,19 +508,20 @@ public class ProjectFrame extends JFrame {
     }
 
     private void setupUI(JPanel contentPanel) {
-        // Style the split pane
+        // Create split pane
         splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPane.setDividerLocation(250);
+        splitPane.setDividerLocation(350);
+        splitPane.setDividerSize(1);
         splitPane.setBorder(null);
-        splitPane.setDividerSize(4);
-        
-        // Remove the default split pane borders
-        splitPane.setBorder(BorderFactory.createEmptyBorder());
+        splitPane.setOpaque(false);
+        splitPane.setBackground(Theme.SURFACE);
 
         // Custom divider styling
         splitPane.setUI(new BasicSplitPaneUI() {
+            @Override
             public BasicSplitPaneDivider createDefaultDivider() {
                 return new BasicSplitPaneDivider(this) {
+                    @Override
                     public void setBorder(Border b) {}
                     @Override
                     public void paint(Graphics g) {
@@ -239,32 +532,39 @@ public class ProjectFrame extends JFrame {
             }
         });
 
-        // Sidebar setup
+        // Create sidebar
         sidebar = new JPanel();
         sidebar.setLayout(new BoxLayout(sidebar, BoxLayout.Y_AXIS));
         Theme.stylePanel(sidebar);
         sidebar.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Search field with modern styling
+        // Add search field
         searchField = new JTextField();
-        Theme.styleTextField(searchField);
-        searchField.setMaximumSize(new Dimension(Short.MAX_VALUE, 35));
+        searchField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
+        searchField.setFont(Theme.NORMAL_FONT);
+        searchField.setForeground(Theme.TEXT);
+        searchField.setBackground(Theme.SURFACE.darker());
+        searchField.setCaretColor(Theme.TEXT);
+        searchField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Theme.BORDER),
+            BorderFactory.createEmptyBorder(5, 5, 5, 5)
+        ));
         searchField.putClientProperty("JTextField.placeholderText", "Search conversions...");
-        searchField.addCaretListener(e -> {
-            String search = searchField.getText().toLowerCase();
-            for (Component c : conversionListPanel.getComponents()) {
-                if (c instanceof JButton) {
-                    JButton btn = (JButton) c;
-                    btn.setVisible(btn.getText().toLowerCase().contains(search));
-                }
+        searchField.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyReleased(KeyEvent e) {
+                filterConversions(searchField.getText());
             }
-            conversionListPanel.revalidate();
-            conversionListPanel.repaint();
         });
-        
-        // Sort dropdown with modern styling
-        JComboBox<String> sortBy = new JComboBox<>(new String[]{"Name", "Natural Sort", "Status", "Duration", "Type"});
-        sortBy.setMaximumSize(new Dimension(Short.MAX_VALUE, 35));
+        sidebar.add(searchField);
+        sidebar.add(Box.createVerticalStrut(10));
+
+        // Add sort dropdown with simple styling
+        JComboBox<String> sortBy = new JComboBox<>(new String[]{"Name", "Natural Sort", "Status", "Type"});
+        sortBy.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
+        sortBy.setFont(Theme.NORMAL_FONT);
+        sortBy.setForeground(Color.BLACK);
+        sortBy.setSelectedItem("Natural Sort"); // Set Natural Sort as default
         
         sortBy.addActionListener(e -> {
             conversionListPanel.removeAll();
@@ -278,99 +578,49 @@ public class ProjectFrame extends JFrame {
             conversionListPanel.revalidate();
             conversionListPanel.repaint();
         });
+        sidebar.add(sortBy);
+        sidebar.add(Box.createVerticalStrut(10));
 
-        // Conversion list panel
+        // Add quick action bar
+        addQuickActionBar(sidebar);
+        sidebar.add(Box.createVerticalStrut(10));
+
+        // Create conversion list panel
         conversionListPanel = new JPanel();
         conversionListPanel.setLayout(new BoxLayout(conversionListPanel, BoxLayout.Y_AXIS));
         Theme.stylePanel(conversionListPanel);
         
-        // Scrollpane with modern styling
+        // Add scroll pane for conversions
         conversionScrollPane = new JScrollPane(conversionListPanel);
-        Theme.styleScrollPane(conversionScrollPane);
-        conversionScrollPane.setBorder(BorderFactory.createEmptyBorder());
-        conversionScrollPane.setMaximumSize(new Dimension(Short.MAX_VALUE, Short.MAX_VALUE));
-        conversionScrollPane.getVerticalScrollBar().setUnitIncrement(16);
-
-        // New conversion button with modern styling
-        newConversion = new JButton("New Conversion");
-        Theme.styleButton(newConversion);
-        newConversion.setMaximumSize(new Dimension(Short.MAX_VALUE, Theme.BUTTON_SIZE.height));
-        
-        newConversion.addActionListener(e -> {
-            // Get the most recent conversion's type
-            String defaultType = "DEFAULT"; // Set a default type if none exists
-            ArrayList<Conversion> conversions = project.getConversions();
-            if (!conversions.isEmpty()) {
-                defaultType = conversions.get(conversions.size() - 1).type.toString();
-            }
-            
-            // Prompt user for conversion name
-            String name = JOptionPane.showInputDialog(
-                ProjectFrame.this,
-                "Enter conversion name:",
-                "New Conversion",
-                JOptionPane.PLAIN_MESSAGE
-            );
-            
-            if (name != null && !name.trim().isEmpty()) {
-                Conversion conversion = new Conversion(name.trim());
-                conversion.type = com.thevideogoat.digitizingassistant.data.Type.valueOf(defaultType);
-                project.getConversions().add(conversion);
-                addConversionToSidebar(conversion);
-                
-                // Select and show the new conversion
-                detailsPanel.removeAll();
-                ConversionPanel conversionPanel = new ConversionPanel(conversion, ProjectFrame.this);
-                JScrollPane scrollPane = new JScrollPane(conversionPanel);
-                Theme.styleScrollPane(scrollPane);
-                scrollPane.setBorder(null);
-                scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-                detailsPanel.add(scrollPane, BorderLayout.CENTER);
-                detailsPanel.revalidate();
-                detailsPanel.repaint();
-                
-                saveProject();
-            }
-        });
-
-        // Add components to sidebar
-        sidebar.add(searchField);
-        sidebar.add(Box.createVerticalStrut(10));
-        sidebar.add(sortBy);
-        sidebar.add(Box.createVerticalStrut(10));
+        conversionScrollPane.setBorder(null);
+        conversionScrollPane.setBackground(Theme.SURFACE);
+        conversionScrollPane.getViewport().setBackground(Theme.SURFACE);
+        conversionScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        conversionScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         sidebar.add(conversionScrollPane);
-        sidebar.add(Box.createVerticalStrut(10));
-        sidebar.add(newConversion);
 
-        // Add quick action buttons
-        addQuickActionBar(sidebar);
-
-        // Details panel
+        // Create details panel
         detailsPanel = new JPanel(new BorderLayout());
         Theme.stylePanel(detailsPanel);
-        detailsPanel.setBorder(BorderFactory.createEmptyBorder());
-        displayTempContentPanel();
+        detailsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        // Load existing conversions
-        for (Conversion conversion : project.getConversions()) {
-            addConversionToSidebar(conversion);
-        }
-
+        // Add panels to split pane
         splitPane.setLeftComponent(sidebar);
         splitPane.setRightComponent(detailsPanel);
-        contentPanel.add(splitPane);
 
-        // Add existing action listeners and functionality...
-        // (keep existing action listener code for searchField, sortBy, newConversion, etc.)
-
-        // Add keyboard shortcuts
-        setupKeyboardShortcuts();
+        // Add split pane to content panel
+        contentPanel.add(splitPane, BorderLayout.CENTER);
 
         // Add status bar
         addStatusBar(contentPanel);
 
-        // Add drag and drop functionality
-        enableDragAndDrop();
+        // Add all conversions to the sidebar
+        for (Conversion conversion : project.getConversions()) {
+            addConversionToSidebar(conversion);
+        }
+
+        // Setup keyboard shortcuts
+        setupKeyboardShortcuts();
     }
 
     private void setupKeyboardShortcuts() {
@@ -396,6 +646,92 @@ public class ProjectFrame extends JFrame {
                 newConversion.doClick();
             }
         });
+
+        // Ctrl+S for save
+        im.put(KeyStroke.getKeyStroke("control S"), "saveProject");
+        am.put("saveProject", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                saveProject();
+            }
+        });
+
+        // [ and ] keys for navigation
+        im.put(KeyStroke.getKeyStroke('['), "selectPrevious");
+        am.put("selectPrevious", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                navigateConversions(-1);
+            }
+        });
+
+        im.put(KeyStroke.getKeyStroke(']'), "selectNext");
+        am.put("selectNext", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                navigateConversions(1);
+            }
+        });
+
+        // Add global key listener to root pane
+        rootPane.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyChar() == '[') {
+                    navigateConversions(-1);
+                } else if (e.getKeyChar() == ']') {
+                    navigateConversions(1);
+                }
+            }
+        });
+    }
+
+    private void navigateConversions(int direction) {
+        // Get all visible conversion buttons
+        ArrayList<JButton> visibleButtons = new ArrayList<>();
+        for (Component c : conversionListPanel.getComponents()) {
+            if (c instanceof JButton && c.isVisible()) {
+                visibleButtons.add((JButton) c);
+            }
+        }
+
+        if (visibleButtons.isEmpty()) return;
+
+        // Find currently selected button
+        JButton selectedButton = null;
+        int selectedIndex = -1;
+        for (int i = 0; i < visibleButtons.size(); i++) {
+            JButton btn = visibleButtons.get(i);
+            if (btn.getBackground().equals(Theme.ACCENT.darker())) {
+                selectedButton = btn;
+                selectedIndex = i;
+                break;
+            }
+        }
+
+        // If no button is selected, select the first/last one
+        if (selectedButton == null) {
+            if (direction > 0) {
+                selectedIndex = 0;
+            } else {
+                selectedIndex = visibleButtons.size() - 1;
+            }
+        } else {
+            // Move to next/previous button
+            selectedIndex += direction;
+            if (selectedIndex < 0) selectedIndex = visibleButtons.size() - 1;
+            if (selectedIndex >= visibleButtons.size()) selectedIndex = 0;
+        }
+
+        // Click the selected button
+        visibleButtons.get(selectedIndex).doClick();
+
+        // Ensure the selected button is visible in the scroll pane
+        Rectangle buttonBounds = visibleButtons.get(selectedIndex).getBounds();
+        Rectangle viewportBounds = conversionScrollPane.getViewport().getViewRect();
+        if (!viewportBounds.contains(buttonBounds)) {
+            visibleButtons.get(selectedIndex).scrollRectToVisible(buttonBounds);
+        }
     }
 
     private void addConversionToSidebar(Conversion conversion) {
@@ -514,18 +850,40 @@ public class ProjectFrame extends JFrame {
 
     private void displayTempContentPanel() {
         detailsPanel.removeAll();
-        JLabel message = new JLabel("Select a conversion from the sidebar", SwingConstants.CENTER);
+        JPanel tempPanel = new JPanel(new BorderLayout());
+        Theme.stylePanel(tempPanel);
+        tempPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        JLabel message = new JLabel("Select a conversion or create a new one");
         message.setFont(Theme.NORMAL_FONT);
-        message.setForeground(Theme.TEXT_SECONDARY);
-        detailsPanel.add(message, BorderLayout.CENTER);
+        message.setForeground(Theme.TEXT);
+        message.setHorizontalAlignment(SwingConstants.CENTER);
+        tempPanel.add(message, BorderLayout.CENTER);
+
+        detailsPanel.add(tempPanel, BorderLayout.CENTER);
         detailsPanel.revalidate();
         detailsPanel.repaint();
     }
 
     public void saveProject() {
+        // Save the current conversion if one is selected
+        if (detailsPanel.getComponentCount() > 0 && 
+            detailsPanel.getComponent(0) instanceof JScrollPane &&
+            ((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView() instanceof ConversionPanel) {
+            ConversionPanel currentPanel = (ConversionPanel)((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView();
+            // Instead of clicking the save button, directly update the conversion
+            currentPanel.updateConversion();
+        }
+
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
         updateButtonColors();
         updateStatusBar();
+        
+        // Show save status in green
+        saveStatusLabel.setForeground(new Color(40, 167, 69)); // Bootstrap success green
+        saveStatusLabel.setText("Saved " + java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")));
+        saveStatusTimer.restart();
+        hasUnsavedChanges = false;
     }
 
     private void addResizeBorder(JPanel mainPanel) {
@@ -650,8 +1008,19 @@ public class ProjectFrame extends JFrame {
         JLabel durationLabel = new JLabel();
         durationLabel.setForeground(Theme.TEXT_SECONDARY);
         durationLabel.setFont(Theme.SMALL_FONT);
+
+        saveStatusLabel = new JLabel();
+        saveStatusLabel.setForeground(Theme.TEXT_SECONDARY);
+        saveStatusLabel.setFont(Theme.SMALL_FONT);
         
-        statusBar.add(progressLabel, BorderLayout.WEST);
+        // Create a panel for the left side labels with spacing
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        leftPanel.setOpaque(false);
+        leftPanel.add(progressLabel);
+        leftPanel.add(Box.createHorizontalStrut(20)); // Add spacing
+        leftPanel.add(saveStatusLabel);
+        
+        statusBar.add(leftPanel, BorderLayout.WEST);
         statusBar.add(durationLabel, BorderLayout.EAST);
         
         contentPanel.add(statusBar, BorderLayout.SOUTH);
@@ -671,18 +1040,29 @@ public class ProjectFrame extends JFrame {
             String progressText = String.format("Completed: %d/%d (%.1f%%)", 
                 completed, total, (completed * 100.0) / Math.max(1, total));
             
-            // Calculate total duration
-            Duration totalDuration = project.getConversions().stream()
-                .map(c -> c.duration)
-                .reduce(Duration.ZERO, Duration::plus);
+            // Calculate total size of linked files
+            long totalSize = project.getConversions().stream()
+                .flatMap(c -> c.linkedFiles != null ? c.linkedFiles.stream() : Stream.empty())
+                .mapToLong(File::length)
+                .sum();
                 
-            String durationText = String.format("Total Duration: %s", formatDuration(totalDuration));
+            String sizeText = String.format("Total Size: %s", formatSize(totalSize));
             
             // Update status bar labels
             Component[] components = statusBar.getComponents();
             if (components.length >= 2) {
-                ((JLabel)components[0]).setText(progressText);
-                ((JLabel)components[1]).setText(durationText);
+                JPanel leftPanel = (JPanel) components[0];
+                JLabel progressLabel = (JLabel) leftPanel.getComponent(0);
+                JLabel saveLabel = (JLabel) leftPanel.getComponent(2);
+                
+                progressLabel.setText(progressText);
+                if (hasUnsavedChanges) {
+                    saveLabel.setForeground(new Color(255, 100, 100));
+                    saveLabel.setText("Changes not saved");
+                } else {
+                    saveLabel.setForeground(Theme.TEXT_SECONDARY);
+                }
+                ((JLabel)components[1]).setText(sizeText);
             }
         }
     }
@@ -723,6 +1103,16 @@ public class ProjectFrame extends JFrame {
                     conversionJson.addProperty("status", conversion.status.toString());
                     conversionJson.addProperty("note", conversion.note);
                     conversionJson.addProperty("duration", conversion.duration.toString());
+                    
+                    // Add linked files
+                    JsonArray linkedFilesArray = new JsonArray();
+                    if (conversion.linkedFiles != null) {
+                        for (File file1 : conversion.linkedFiles) {
+                            linkedFilesArray.add(file1.getAbsolutePath());
+                        }
+                    }
+                    conversionJson.add("linkedFiles", linkedFilesArray);
+                    
                     conversionsArray.add(conversionJson);
                 }
                 projectJson.add("conversions", conversionsArray);
@@ -740,138 +1130,160 @@ public class ProjectFrame extends JFrame {
     }
 
     private void showMediaStatistics() {
-        // Create scrollable statistics panel
-        JPanel statsPanel = new JPanel(new GridBagLayout());
-        statsPanel.setBackground(Color.WHITE);
-        statsPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
-        
+        JDialog dialog = new JDialog(this, "Media Statistics", true);
+        dialog.setSize(400, 500);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        Theme.stylePanel(panel);
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.anchor = GridBagConstraints.WEST;
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(5, 5, 5, 5);
         
-        // Project Overview Section
-        JLabel overviewHeader = new JLabel("Media Statistics");
-        overviewHeader.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 16));
-        overviewHeader.setForeground(Color.BLACK);
-        statsPanel.add(overviewHeader, gbc);
-        
-        // Calculate statistics
-        int totalConversions = project.getConversions().size();
-        long completedCount = project.getConversions().stream()
-            .filter(c -> c.status == ConversionStatus.COMPLETED)
-            .count();
-        Duration totalDuration = project.getConversions().stream()
-            .map(c -> c.duration)
-            .reduce(Duration.ZERO, Duration::plus);
-        
-        // Count files and directories
+        // Header
+        JLabel header = new JLabel("Media Statistics");
+        header.setFont(Theme.HEADER_FONT);
+        header.setForeground(Theme.TEXT);
+        panel.add(header, gbc);
+        panel.add(Box.createVerticalStrut(20), gbc);
+
+        // Calculate statistics for linked files only
         int totalFiles = 0;
-        int totalDirs = 0;
-        int totalSubDirs = 0;
-        
+        long totalSize = 0;
+        Map<String, Integer> typeCount = new HashMap<>();
+        Map<String, Long> typeSize = new HashMap<>();
+
+        // Process all linked files
         for (Conversion conversion : project.getConversions()) {
             if (conversion.linkedFiles != null) {
                 for (File file : conversion.linkedFiles) {
-                    if (file.isDirectory()) {
-                        totalDirs++;
-                        // Count subdirectories
-                        totalSubDirs += countSubdirectories(file);
-                    } else {
+                    if (file.isFile()) {
                         totalFiles++;
+                        long size = file.length();
+                        totalSize += size;
+
+                        String type = getExtension(file).toLowerCase();
+                        typeCount.merge(type, 1, Integer::sum);
+                        typeSize.merge(type, size, Long::sum);
                     }
                 }
             }
         }
-        
-        // Media Type Statistics
-        Map<com.thevideogoat.digitizingassistant.data.Type, Integer> mediaTypeStats = new HashMap<>();
-        Map<com.thevideogoat.digitizingassistant.data.Type, Duration> typeDurations = new HashMap<>();
-        for (Conversion conversion : project.getConversions()) {
-            mediaTypeStats.merge(conversion.type, 1, Integer::sum);
-            typeDurations.merge(conversion.type, conversion.duration, Duration::plus);
+
+        // Display statistics
+        addStatRow(panel, gbc, "Total Files", String.valueOf(totalFiles));
+        addStatRow(panel, gbc, "Total Size", formatSize(totalSize));
+        panel.add(Box.createVerticalStrut(20), gbc);
+
+        // File types
+        JLabel typesHeader = new JLabel("File Types");
+        typesHeader.setFont(Theme.NORMAL_FONT.deriveFont(Font.BOLD));
+        typesHeader.setForeground(Theme.TEXT);
+        panel.add(typesHeader, gbc);
+        panel.add(Box.createVerticalStrut(10), gbc);
+
+        for (Map.Entry<String, Integer> entry : typeCount.entrySet()) {
+            String type = entry.getKey();
+            int count = entry.getValue();
+            long size = typeSize.get(type);
+            
+            StringBuilder typeStats = new StringBuilder();
+            typeStats.append(count).append(" files");
+            typeStats.append(" (").append(formatSize(size)).append(")");
+            
+            addStatRow(panel, gbc, type.toUpperCase(), typeStats.toString());
         }
-        
-        // Add Overview Statistics
-        gbc.gridy++;
-        gbc.gridx = 0;
-        gbc.gridwidth = 2;
-        addStatRow(statsPanel, gbc, "Total Conversions", String.format("%d (%d completed)", 
-            totalConversions, completedCount));
-        addStatRow(statsPanel, gbc, "Total Duration", formatDuration(totalDuration));
-        addStatRow(statsPanel, gbc, "Linked Files", String.format("%d files, %d directories", 
-            totalFiles, totalDirs));
-        
-        if (totalSubDirs > 0) {
-            addStatRow(statsPanel, gbc, "Subdirectories", String.valueOf(totalSubDirs));
-        }
-        
-        // Media Type Breakdown
-        gbc.gridy++;
-        gbc.gridx = 0;
-        gbc.gridwidth = 2;
-        JLabel typeHeader = new JLabel("Media Type Breakdown");
-        typeHeader.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 14));
-        typeHeader.setForeground(Color.BLACK);
-        statsPanel.add(typeHeader, gbc);
-        
-        // Add type statistics
-        for (com.thevideogoat.digitizingassistant.data.Type type : com.thevideogoat.digitizingassistant.data.Type.values()) {
-            int count = mediaTypeStats.getOrDefault(type, 0);
-            if (count > 0) {
-                Duration typeDuration = typeDurations.getOrDefault(type, Duration.ZERO);
-                String statValue = String.format("%d items, %s", count, formatDuration(typeDuration));
-                addStatRow(statsPanel, gbc, type.toString(), statValue);
-            }
-        }
-        
-        // Create scrollable container
-        JScrollPane scrollPane = new JScrollPane(statsPanel);
-        scrollPane.setPreferredSize(new Dimension(400, Math.min(500, statsPanel.getPreferredSize().height + 50)));
+
+        // Add close button
+        JButton closeButton = new JButton("Close");
+        Theme.styleButton(closeButton);
+        closeButton.addActionListener(e -> dialog.dispose());
+        panel.add(Box.createVerticalStrut(20), gbc);
+        panel.add(closeButton, gbc);
+
+        // Make the panel scrollable
+        JScrollPane scrollPane = new JScrollPane(panel);
         scrollPane.setBorder(null);
+        scrollPane.setBackground(Theme.SURFACE);
+        scrollPane.getViewport().setBackground(Theme.SURFACE);
+        scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         
-        // Show dialog
-        JOptionPane.showMessageDialog(this,
-            scrollPane,
-            "Media Statistics",
-            JOptionPane.PLAIN_MESSAGE);
+        // Style the scrollbar
+        scrollPane.getVerticalScrollBar().setBackground(Theme.SURFACE);
+        scrollPane.getVerticalScrollBar().setForeground(Theme.TEXT);
+        scrollPane.getVerticalScrollBar().setUnitIncrement(16);
+        
+        dialog.add(scrollPane);
+        dialog.setVisible(true);
     }
 
-    private void addStatRow(JPanel panel, GridBagConstraints gbc, String label, String value) {
-        gbc.gridy++;
-        gbc.gridx = 0;
-        gbc.gridwidth = 1;
-        gbc.insets = new Insets(5, 20, 5, 20);
-        
-        JLabel statLabel = new JLabel(label + ":");
-        statLabel.setForeground(Color.BLACK);
-        panel.add(statLabel, gbc);
-        
-        gbc.gridx = 1;
-        JLabel statValue = new JLabel(value);
-        statValue.setForeground(Color.BLACK);
-        panel.add(statValue, gbc);
+    private boolean isVideoFile(String extension) {
+        return extension.matches("(mp4|mkv|avi|mov|wmv|flv|webm)");
     }
 
-    private int countSubdirectories(File directory) {
-        int count = 0;
-        File[] files = directory.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    count++;
-                    count += countSubdirectories(file);
+    private Duration getVideoDuration(File file) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffprobe",
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                file.getAbsolutePath()
+            );
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String output = reader.readLine();
+            if (output != null) {
+                double seconds = Double.parseDouble(output);
+                return Duration.ofSeconds((long) seconds);
+            }
+        } catch (Exception e) {
+            // If ffprobe fails, try to get duration from the file name
+            String name = file.getName();
+            if (name.matches(".*\\d{2}-\\d{2}-\\d{2}.*")) {
+                try {
+                    String[] parts = name.split("\\d{2}-\\d{2}-\\d{2}")[1].split("\\.")[0].trim().split("-");
+                    if (parts.length == 2) {
+                        String[] start = parts[0].trim().split(":");
+                        String[] end = parts[1].trim().split(":");
+                        if (start.length == 3 && end.length == 3) {
+                            int startSeconds = Integer.parseInt(start[0]) * 3600 + 
+                                             Integer.parseInt(start[1]) * 60 + 
+                                             Integer.parseInt(start[2]);
+                            int endSeconds = Integer.parseInt(end[0]) * 3600 + 
+                                           Integer.parseInt(end[1]) * 60 + 
+                                           Integer.parseInt(end[2]);
+                            return Duration.ofSeconds(endSeconds - startSeconds);
+                        }
+                    }
+                } catch (Exception ex) {
+                    // Ignore parsing errors
                 }
             }
         }
-        return count;
+        return null;
+    }
+
+    private String formatSize(long bytes) {
+        String[] units = {"B", "KB", "MB", "GB", "TB"};
+        int unitIndex = 0;
+        double size = bytes;
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        return String.format("%.2f %s", size, units[unitIndex]);
     }
 
     private String formatDuration(Duration duration) {
         long hours = duration.toHours();
         long minutes = duration.toMinutesPart();
-        return String.format("%d:%02d", hours, minutes);
+        long seconds = duration.toSecondsPart();
+        return String.format("%02d:%02d:%02d", hours, minutes, seconds);
     }
 
     private void showConversionDetails(Conversion conversion) {
@@ -951,5 +1363,188 @@ public class ProjectFrame extends JFrame {
                 }
             }
         });
+    }
+
+    // Add this method to mark changes as unsaved
+    public void markUnsavedChanges() {
+        hasUnsavedChanges = true;
+        updateStatusBar();
+    }
+
+    // Helper method to normalize filenames for matching
+    private String normalizeFilename(String name) {
+        // Remove extension
+        int dot = name.lastIndexOf('.');
+        if (dot != -1) name = name.substring(0, dot);
+        // Remove spaces, parentheses, dashes, underscores, and non-alphanumeric
+        return name.replaceAll("[\\s\\(\\)\\-_.]", "").replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+    }
+
+    // Helper method to extract numeric part from filename
+    private String extractNumber(String name) {
+        return name.replaceAll("\\D", "");
+    }
+
+    // Improved helper method to recursively search for trimmed files
+    private void searchForTrimmedFiles(File directory, ArrayList<File> originalFiles, Map<File, File> trimmedFileMap) {
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    // Recursively search subdirectories
+                    searchForTrimmedFiles(file, originalFiles, trimmedFileMap);
+                } else {
+                    String trimmedName = file.getName();
+                    if (trimmedName.contains("_trimmed")) {
+                        String trimmedNorm = normalizeFilename(trimmedName.substring(0, trimmedName.indexOf("_trimmed")));
+                        String trimmedNum = extractNumber(trimmedName);
+                        ArrayList<File> possibleMatches = new ArrayList<>();
+                        for (File originalFile : originalFiles) {
+                            String origName = originalFile.getName();
+                            String origNorm = normalizeFilename(origName);
+                            String origNum = extractNumber(origName);
+                            // Match if normalized base matches or number matches
+                            if (origNorm.equals(trimmedNorm) || (!origNum.isEmpty() && origNum.equals(trimmedNum))) {
+                                possibleMatches.add(originalFile);
+                            }
+                        }
+                        if (possibleMatches.size() == 1) {
+                            trimmedFileMap.put(possibleMatches.get(0), file);
+                        } else if (possibleMatches.size() > 1) {
+                            // Ambiguous, log for user review
+                            logFileOperation("AMBIGUOUS MATCH", "Trimmed file '" + file.getName() + "' matches multiple originals: " + possibleMatches);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Add this method to create and write to log files
+    private void logFileOperation(String operation, String details) {
+        try {
+            // Create logs directory if it doesn't exist
+            File logsDir = new File(DigitizingAssistant.PROJECTS_DIRECTORY, "logs");
+            if (!logsDir.exists()) {
+                logsDir.mkdirs();
+            }
+            
+            // Create timestamped log file
+            String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
+            File logFile = new File(logsDir, project.getName() + "_" + timestamp + ".log");
+            
+            // Write to log file
+            try (FileWriter writer = new FileWriter(logFile, true)) {
+                writer.write("[" + java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss")) + "] ");
+                writer.write(operation + ": " + details + "\n");
+            }
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this,
+                "Error writing to log file: " + e.getMessage(),
+                "Log Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // Helper to gather all files in project directories
+    private ArrayList<File> getAllFilesInProjectDirectories() {
+        HashSet<File> dirs = new HashSet<>();
+        for (Conversion c : project.getConversions()) {
+            for (File f : c.linkedFiles) {
+                if (f.getParentFile() != null) {
+                    dirs.add(f.getParentFile());
+                }
+            }
+        }
+        ArrayList<File> allFiles = new ArrayList<>();
+        for (File dir : dirs) {
+            gatherFilesRecursive(dir, allFiles);
+        }
+        return allFiles;
+    }
+
+    private void gatherFilesRecursive(File dir, ArrayList<File> allFiles) {
+        File[] files = dir.listFiles();
+        if (files != null) {
+            for (File f : files) {
+                if (f.isDirectory()) {
+                    gatherFilesRecursive(f, allFiles);
+                } else {
+                    allFiles.add(f);
+                }
+            }
+        }
+    }
+
+    // Add these helper methods at the class level
+    private void updateLinkedFilesAfterRename(Conversion c, String baseName) {
+        ArrayList<File> updated = new ArrayList<>();
+        for (File oldFile : c.linkedFiles) {
+            File dir = oldFile.getParentFile();
+            if (dir != null && dir.exists()) {
+                File[] files = dir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        String norm = normalizeFilename(f.getName());
+                        String baseNorm = normalizeFilename(baseName);
+                        if (norm.contains(baseNorm) && f.getName().endsWith(getExtension(oldFile))) {
+                            updated.add(f);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if (!updated.isEmpty()) {
+            c.linkedFiles.clear();
+            c.linkedFiles.addAll(updated);
+        }
+    }
+
+    private String getExtension(File file) {
+        String name = file.getName();
+        int dot = name.lastIndexOf('.');
+        return (dot != -1) ? name.substring(dot) : "";
+    }
+
+    private void openProjectFolder() {
+        try {
+            Desktop.getDesktop().open(DigitizingAssistant.PROJECTS_DIRECTORY);
+        } catch (IOException ex) {
+            JOptionPane.showMessageDialog(this,
+                "Could not open project folder: " + ex.getMessage(),
+                "Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void filterConversions(String searchText) {
+        String search = searchText.toLowerCase();
+        for (Component c : conversionListPanel.getComponents()) {
+            if (c instanceof JButton) {
+                JButton btn = (JButton) c;
+                btn.setVisible(btn.getText().toLowerCase().contains(search));
+            }
+        }
+        conversionListPanel.revalidate();
+        conversionListPanel.repaint();
+    }
+
+    private void addStatRow(JPanel panel, GridBagConstraints gbc, String label, String value) {
+        JPanel rowPanel = new JPanel(new BorderLayout());
+        Theme.stylePanel(rowPanel);
+        rowPanel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+        
+        JLabel labelComponent = new JLabel(label);
+        labelComponent.setFont(Theme.NORMAL_FONT);
+        labelComponent.setForeground(Theme.TEXT);
+        
+        JLabel valueComponent = new JLabel(value);
+        valueComponent.setFont(Theme.NORMAL_FONT);
+        valueComponent.setForeground(Theme.TEXT);
+        
+        rowPanel.add(labelComponent, BorderLayout.WEST);
+        rowPanel.add(valueComponent, BorderLayout.EAST);
+        panel.add(rowPanel, gbc);
     }
 }

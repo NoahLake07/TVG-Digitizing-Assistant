@@ -1,11 +1,19 @@
 package com.thevideogoat.digitizingassistant.data;
 
 import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
+import java.awt.*;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.ArrayList;
 
 public class Project implements Serializable {
@@ -39,19 +47,95 @@ public class Project implements Serializable {
         }
     }
 
+    public Project(File jsonFile) {
+        try {
+            // Read the JSON file
+            String jsonContent = new String(Files.readAllBytes(jsonFile.toPath()));
+            JsonObject jsonObject = JsonParser.parseString(jsonContent).getAsJsonObject();
+            
+            // Parse project name
+            this.name = jsonObject.get("name").getAsString();
+            this.conversions = new ArrayList<>();
+            
+            // Parse conversions
+            JsonArray conversionsArray = jsonObject.getAsJsonArray("conversions");
+            for (JsonElement element : conversionsArray) {
+                JsonObject conversionJson = element.getAsJsonObject();
+                Conversion conversion = new Conversion(conversionJson.get("name").getAsString());
+                conversion.type = Type.valueOf(conversionJson.get("type").getAsString());
+                
+                // Handle status by display name
+                String statusStr = conversionJson.get("status").getAsString();
+                for (ConversionStatus status : ConversionStatus.values()) {
+                    if (status.toString().equals(statusStr)) {
+                        conversion.status = status;
+                        break;
+                    }
+                }
+                
+                conversion.note = conversionJson.get("note").getAsString();
+                conversion.duration = Duration.parse(conversionJson.get("duration").getAsString());
+                
+                // Handle linked files
+                if (conversionJson.has("linkedFiles")) {
+                    JsonArray linkedFilesArray = conversionJson.getAsJsonArray("linkedFiles");
+                    conversion.linkedFiles = new ArrayList<>();
+                    for (JsonElement fileElement : linkedFilesArray) {
+                        String filePath = fileElement.getAsString();
+                        File file = new File(filePath);
+                        if (file.exists()) {
+                            conversion.linkedFiles.add(file);
+                        }
+                    }
+                }
+                
+                this.conversions.add(conversion);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read JSON file: " + e.getMessage(), e);
+        }
+    }
+
     public void addConversion(Conversion conversion){
         conversions.add(conversion);
     }
 
     public void saveToFile(Path destination) {
-        File projectFile = Paths.get(destination.toString(), name + ".project").toFile();
+        File projectFile = Paths.get(destination.toString(), name + ".json").toFile();
 
         try {
-            // Serialize this class to the destination
-            FileOutputStream fileOut = new FileOutputStream(projectFile);
-            ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOut);
-            objectOutputStream.writeObject(this);
-
+            // Create JSON object
+            JsonObject projectJson = new JsonObject();
+            projectJson.addProperty("name", name);
+            projectJson.addProperty("version", DigitizingAssistant.VERSION);
+            
+            // Add conversions
+            JsonArray conversionsArray = new JsonArray();
+            for (Conversion conversion : conversions) {
+                JsonObject conversionJson = new JsonObject();
+                conversionJson.addProperty("name", conversion.name);
+                conversionJson.addProperty("type", conversion.type.toString());
+                conversionJson.addProperty("status", conversion.status.toString());
+                conversionJson.addProperty("note", conversion.note);
+                conversionJson.addProperty("duration", conversion.duration.toString());
+                
+                // Add linked files
+                JsonArray linkedFilesArray = new JsonArray();
+                if (conversion.linkedFiles != null) {
+                    for (File file : conversion.linkedFiles) {
+                        linkedFilesArray.add(file.getAbsolutePath());
+                    }
+                }
+                conversionJson.add("linkedFiles", linkedFilesArray);
+                
+                conversionsArray.add(conversionJson);
+            }
+            projectJson.add("conversions", conversionsArray);
+            
+            // Write to file
+            try (FileWriter writer = new FileWriter(projectFile)) {
+                new GsonBuilder().setPrettyPrinting().create().toJson(projectJson, writer);
+            }
         } catch (IOException e) {
             throw new Error("Failed to save project to file.", e);
         }

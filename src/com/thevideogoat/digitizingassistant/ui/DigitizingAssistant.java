@@ -1,15 +1,22 @@
 package com.thevideogoat.digitizingassistant.ui;
 
 import com.thevideogoat.digitizingassistant.data.Project;
+import com.thevideogoat.digitizingassistant.data.Conversion;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Objects;
 
@@ -18,7 +25,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.3";
+    public static final String VERSION = "1.4";
 
     private static DigitizingAssistant instance;
 
@@ -104,6 +111,18 @@ public class DigitizingAssistant {
         Theme.styleScrollPane(scrollPane);
         scrollPane.setPreferredSize(new Dimension(360, 400));
 
+        // Load projects
+        File[] allProjects = PROJECTS_DIRECTORY.listFiles();
+        DefaultListModel<File> listModel = new DefaultListModel<>();
+        if (allProjects != null) {
+            for (File f : allProjects) {
+                if(f.getName().endsWith(".project") || f.getName().endsWith(".json")) {
+                    listModel.addElement(f);
+                }
+            }
+        }
+        projectList.setModel(listModel);
+
         // Set custom cell renderer
         projectList.setCellRenderer(new DefaultListCellRenderer() {
             @Override
@@ -111,29 +130,25 @@ public class DigitizingAssistant {
                 Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 if (c instanceof JLabel && value instanceof File) {
                     JLabel label = (JLabel) c;
-                    String name = ((File) value).getName();
-                    name = name.substring(0, name.lastIndexOf(".project"));
-                    label.setText(name);
+                    File file = (File) value;
+                    String name = file.getName();
+                    String extension = name.substring(name.lastIndexOf("."));
+                    name = name.substring(0, name.lastIndexOf("."));
+                    
+                    if (extension.equals(".project")) {
+                        label.setText(name + " (Needs Upgrade)");
+                        label.setForeground(isSelected ? Theme.TEXT : new Color(255, 165, 0)); // Orange for .project files
+                    } else {
+                        label.setText(name);
+                        label.setForeground(isSelected ? Theme.TEXT : Theme.TEXT_SECONDARY);
+                    }
                     // Add padding to the left
                     label.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
                 }
-                setForeground(isSelected ? Theme.TEXT : Theme.TEXT_SECONDARY);
                 setBackground(isSelected ? Theme.ACCENT : Theme.SURFACE);
                 return this;
             }
         });
-
-        // Load projects
-        File[] allProjects = PROJECTS_DIRECTORY.listFiles();
-        DefaultListModel<File> listModel = new DefaultListModel<>();
-        if (allProjects != null) {
-            for (File f : allProjects) {
-                if(f.getName().endsWith(".project")) {
-                    listModel.addElement(f);
-                }
-            }
-        }
-        projectList.setModel(listModel);
 
         // Button panel
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
@@ -141,8 +156,111 @@ public class DigitizingAssistant {
         
         JButton newProjectBtn = new JButton("New Project");
         JButton openProjectBtn = new JButton("Open Project");
+        JButton menuBtn = new JButton("≡");
+        menuBtn.setPreferredSize(new Dimension(30, 30));
         Theme.styleButton(newProjectBtn);
         Theme.styleButton(openProjectBtn);
+        Theme.styleButton(menuBtn);
+
+        // Create popup menu
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(Theme.SURFACE);
+        menu.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
+        
+        JMenuItem importItem = new JMenuItem("Import Project");
+        importItem.setForeground(Color.BLACK);
+
+        JMenuItem openProjectFolder = new JMenuItem("Open Project Folder");
+        openProjectFolder.setForeground(Color.BLACK);
+        
+        JMenuItem toolsMenu = new JMenuItem("Tools");
+        toolsMenu.setForeground(Color.BLACK);
+        
+        // Create tools submenu
+        JPopupMenu toolsSubmenu = new JPopupMenu();
+        toolsSubmenu.setBackground(Theme.SURFACE);
+        
+        // Common tools
+        String[][] tools = {
+            {"HandBrake", "HandBrake.exe"},
+            {"MakeMKV", "makemkv.exe"},
+            {"LosslessCut", "LosslessCut.exe"}
+        };
+        
+        for (String[] tool : tools) {
+            JMenuItem toolItem = new JMenuItem(tool[0]);
+            toolItem.setForeground(Color.BLACK);
+            toolItem.addActionListener(e -> {
+                try {
+                    // Try to find the tool in common locations
+                    String[] searchPaths = {
+                        System.getenv("ProgramFiles"),
+                        System.getenv("ProgramFiles(x86)"),
+                        System.getenv("LOCALAPPDATA")
+                    };
+                    
+                    File toolFile = null;
+                    for (String path : searchPaths) {
+                        if (path != null) {
+                            File possibleFile = new File(path, tool[1]);
+                            if (possibleFile.exists()) {
+                                toolFile = possibleFile;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (toolFile != null) {
+                        Desktop.getDesktop().open(toolFile);
+                    } else {
+                        JOptionPane.showMessageDialog(null,
+                            "Could not find " + tool[0] + ". Please make sure it is installed.",
+                            "Tool Not Found",
+                            JOptionPane.WARNING_MESSAGE);
+                    }
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(null,
+                        "Could not launch " + tool[0] + ": " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            });
+            
+            // Add hover effect
+            toolItem.addChangeListener(e -> {
+                if (toolItem.isArmed()) {
+                    toolItem.setBackground(Theme.ACCENT);
+                } else {
+                    toolItem.setBackground(Theme.SURFACE);
+                }
+            });
+            
+            toolsSubmenu.add(toolItem);
+        }
+        
+        // Add tools menu click handler
+        toolsMenu.addActionListener(e -> {
+            toolsSubmenu.show(toolsMenu, 0, toolsMenu.getHeight());
+        });
+        
+        // Add hover effect for tools menu
+        toolsMenu.addChangeListener(e -> {
+            if (toolsMenu.isArmed()) {
+                toolsMenu.setBackground(Theme.ACCENT);
+            } else {
+                toolsMenu.setBackground(Theme.SURFACE);
+            }
+        });
+        
+        menu.add(importItem);
+        menu.add(openProjectFolder);
+        menu.addSeparator();
+        menu.add(toolsMenu);
+
+        // Add menu button click handler
+        menuBtn.addActionListener(e -> {
+            menu.show(menuBtn, 0, menuBtn.getHeight());
+        });
 
         newProjectBtn.addActionListener(e -> {
             String projectName = JOptionPane.showInputDialog(projectChooser, "Project Name:");
@@ -154,8 +272,64 @@ public class DigitizingAssistant {
 
         openProjectBtn.addActionListener(e -> {
             if (projectList.getSelectedValue() != null) {
-                new ProjectFrame(new Project(projectList.getSelectedValue().toPath()));
-                projectChooser.dispose();
+                File selectedFile = projectList.getSelectedValue();
+                if (selectedFile.getName().endsWith(".project")) {
+                    JOptionPane.showMessageDialog(projectChooser,
+                        "This project needs to be upgraded to the new format. Please double-click it to upgrade.",
+                        "Project Upgrade Required",
+                        JOptionPane.WARNING_MESSAGE);
+                } else {
+                    new ProjectFrame(new Project(selectedFile));
+                    projectChooser.dispose();
+                }
+            }
+        });
+
+        importItem.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Import Project");
+            fileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+            
+            if (fileChooser.showOpenDialog(projectChooser) == JFileChooser.APPROVE_OPTION) {
+                try {
+                    // Import the project
+                    Project importedProject = new Project(fileChooser.getSelectedFile());
+                    
+                    // Save it as a .project file
+                    importedProject.saveToFile(PROJECTS_DIRECTORY.toPath());
+                    
+                    // Refresh the project list
+                    listModel.clear();
+                    File[] updatedProjects = PROJECTS_DIRECTORY.listFiles();
+                    if (updatedProjects != null) {
+                        for (File f : updatedProjects) {
+                            if(f.getName().endsWith(".project")) {
+                                listModel.addElement(f);
+                            }
+                        }
+                    }
+                    
+                    JOptionPane.showMessageDialog(projectChooser,
+                        "Project imported successfully.",
+                        "Import Success",
+                        JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(projectChooser,
+                        "Error importing project: " + ex.getMessage(),
+                        "Import Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        openProjectFolder.addActionListener(e -> {
+            try {
+                Desktop.getDesktop().open(DigitizingAssistant.PROJECTS_DIRECTORY);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(null,
+                        "Could not open project folder: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -172,14 +346,76 @@ public class DigitizingAssistant {
                     int index = projectList.locationToIndex(me.getPoint());
                     if (index != -1) {
                         File selectedFile = listModel.getElementAt(index);
-                        new ProjectFrame(new Project(selectedFile.toPath()));
-                        projectChooser.dispose();
+                        if (selectedFile.getName().endsWith(".project")) {
+                            int choice = JOptionPane.showConfirmDialog(projectChooser,
+                                "This project needs to be upgraded to the new format. Would you like to export it as JSON now?",
+                                "Project Upgrade Required",
+                                JOptionPane.YES_NO_OPTION);
+                            if (choice == JOptionPane.YES_OPTION) {
+                                try {
+                                    // Load the old project
+                                    Project oldProject = new Project(selectedFile.toPath());
+                                    // Export as JSON
+                                    File jsonFile = new File(PROJECTS_DIRECTORY, oldProject.getName() + ".json");
+                                    try (FileWriter writer = new FileWriter(jsonFile)) {
+                                        JsonObject projectJson = new JsonObject();
+                                        projectJson.addProperty("name", oldProject.getName());
+                                        projectJson.addProperty("version", VERSION);
+                                        
+                                        JsonArray conversionsArray = new JsonArray();
+                                        for (Conversion conversion : oldProject.getConversions()) {
+                                            JsonObject conversionJson = new JsonObject();
+                                            conversionJson.addProperty("name", conversion.name);
+                                            conversionJson.addProperty("type", conversion.type.toString());
+                                            conversionJson.addProperty("status", conversion.status.toString());
+                                            conversionJson.addProperty("note", conversion.note);
+                                            conversionJson.addProperty("duration", conversion.duration.toString());
+                                            
+                                            // Add linked files
+                                            JsonArray linkedFilesArray = new JsonArray();
+                                            if (conversion.linkedFiles != null) {
+                                                for (File file : conversion.linkedFiles) {
+                                                    linkedFilesArray.add(file.getAbsolutePath());
+                                                }
+                                            }
+                                            conversionJson.add("linkedFiles", linkedFilesArray);
+                                            
+                                            conversionsArray.add(conversionJson);
+                                        }
+                                        projectJson.add("conversions", conversionsArray);
+                                        
+                                        new GsonBuilder().setPrettyPrinting().create().toJson(projectJson, writer);
+                                    }
+                                    
+                                    // Delete the old .project file
+                                    selectedFile.delete();
+                                    
+                                    // Refresh the list
+                                    listModel.removeElement(selectedFile);
+                                    listModel.addElement(jsonFile);
+                                    
+                                    JOptionPane.showMessageDialog(projectChooser,
+                                        "Project has been upgraded to the new format.",
+                                        "Upgrade Complete",
+                                        JOptionPane.INFORMATION_MESSAGE);
+                                } catch (Exception ex) {
+                                    JOptionPane.showMessageDialog(projectChooser,
+                                        "Error upgrading project: " + ex.getMessage(),
+                                        "Upgrade Error",
+                                        JOptionPane.ERROR_MESSAGE);
+                                }
+                            }
+                        } else {
+                            new ProjectFrame(new Project(selectedFile));
+                            projectChooser.dispose();
+                        }
                     }
                 }
             }
         });
 
         buttonPanel.add(newProjectBtn);
+        buttonPanel.add(menuBtn);
         buttonPanel.add(openProjectBtn);
 
         contentPanel.add(scrollPane);
@@ -237,6 +473,78 @@ public class DigitizingAssistant {
         }
 
         instance = new DigitizingAssistant();
+        
+        // Check if we've shown the welcome message before
+        File versionFile = new File(PROJECTS_DIRECTORY, ".version");
+        boolean showWelcome = false;
+        try {
+            showWelcome = !versionFile.exists() || !VERSION.equals(new String(Files.readAllBytes(versionFile.toPath())).trim());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        if (showWelcome) {
+            // Show welcome message for version 1.4
+            JPanel welcomePanel = new JPanel(new BorderLayout(10, 10));
+            welcomePanel.setBackground(Theme.SURFACE);
+            welcomePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            
+            // Header
+            JLabel header = new JLabel("Welcome to Digitizing Assistant v" + VERSION);
+            header.setFont(Theme.HEADER_FONT);
+            header.setForeground(Theme.TEXT);
+            welcomePanel.add(header, BorderLayout.NORTH);
+            
+            // Content
+            JPanel contentPanel = new JPanel();
+            contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
+            contentPanel.setBackground(Theme.SURFACE);
+            
+            // New Features
+            JLabel featuresHeader = new JLabel("New Features:");
+            featuresHeader.setFont(Theme.NORMAL_FONT.deriveFont(Font.BOLD));
+            featuresHeader.setForeground(Theme.TEXT);
+            contentPanel.add(featuresHeader);
+            contentPanel.add(Box.createVerticalStrut(10));
+            
+            String[] features = {
+                "• New JSON project format for better compatibility",
+                "• Automatic upgrade path for old projects",
+                "• Quick access to project folder",
+                "• Improved project import/export",
+                "• New tools launcher for common applications"
+            };
+            
+            for (String feature : features) {
+                JLabel featureLabel = new JLabel(feature);
+                featureLabel.setFont(Theme.NORMAL_FONT);
+                featureLabel.setForeground(Theme.TEXT);
+                contentPanel.add(featureLabel);
+                contentPanel.add(Box.createVerticalStrut(5));
+            }
+            
+            contentPanel.add(Box.createVerticalStrut(10));
+            
+            // Note about project format
+            JLabel noteLabel = new JLabel("<html><body style='width: 300px'>" +
+                "<b>Note:</b> Projects are now saved in JSON format. Old projects will be automatically upgraded when opened.</body></html>");
+            noteLabel.setFont(Theme.NORMAL_FONT);
+            noteLabel.setForeground(Theme.TEXT);
+            contentPanel.add(noteLabel);
+            
+            welcomePanel.add(contentPanel, BorderLayout.CENTER);
+            
+            // Show dialog
+            JOptionPane.showMessageDialog(null, welcomePanel, "Welcome to Digitizing Assistant", JOptionPane.PLAIN_MESSAGE);
+            
+            // Save the version to prevent showing the message again
+            try {
+                Files.write(versionFile.toPath(), VERSION.getBytes());
+            } catch (IOException e) {
+                // If we can't save the version, that's okay - the message will show again next time
+            }
+        }
+        
         instance.chooseProject();
     }
 }
