@@ -62,7 +62,7 @@ public class Project implements Serializable {
             for (JsonElement element : conversionsArray) {
                 JsonObject conversionJson = element.getAsJsonObject();
                 Conversion conversion = new Conversion(conversionJson.get("name").getAsString());
-                conversion.type = Type.valueOf(conversionJson.get("type").getAsString());
+                conversion.type = Type.fromDisplayName(conversionJson.get("type").getAsString());
                 
                 // Handle status by display name
                 String statusStr = conversionJson.get("status").getAsString();

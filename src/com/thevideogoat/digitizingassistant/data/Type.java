@@ -11,13 +11,26 @@ public enum Type {
     TYPE_II("Type II"),
     ;
 
-    final String name;
-    Type(String s){
-        this.name = s;
+    private final String displayName;
+    Type(String displayName){
+        this.displayName = displayName;
     }
 
     @Override
     public String toString(){
-        return this.name;
+        return this.displayName;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public static Type fromDisplayName(String name) {
+        for (Type t : values()) {
+            if (t.displayName.equalsIgnoreCase(name) || t.name().equalsIgnoreCase(name.replace("/", "_"))) {
+                return t;
+            }
+        }
+        throw new IllegalArgumentException("Unknown type: " + name);
     }
 }
