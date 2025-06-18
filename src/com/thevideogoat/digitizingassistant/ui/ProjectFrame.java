@@ -117,6 +117,7 @@ public class ProjectFrame extends JFrame {
         menuButton.setBorderPainted(false);
         menuButton.setContentAreaFilled(false);
         menuButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        menuButton.setToolTipText("Project menu - Access tools and options");
         menuButton.addMouseListener(new MouseAdapter() {
             public void mouseEntered(MouseEvent e) {
                 menuButton.setForeground(Theme.ACCENT);
@@ -136,6 +137,15 @@ public class ProjectFrame extends JFrame {
         JMenuItem findAndRelinkTrimmed = new JMenuItem("Find and Relink Trimmed Media");
         JMenuItem renameProjectFiles = new JMenuItem("Rename Project Files");
         JMenuItem openProjectFolder = new JMenuItem("Open Project Folder");
+        
+        // Add tooltips to menu items
+        refreshList.setToolTipText("Refresh the conversion list to show any external changes");
+        exportProject.setToolTipText("Export project data as JSON file for backup or sharing");
+        mediaStats.setToolTipText("View statistics about all media files in the project");
+        relinkTrimmed.setToolTipText("Relink files to their trimmed versions in the same directory");
+        findAndRelinkTrimmed.setToolTipText("Search subdirectories for trimmed versions of linked files");
+        renameProjectFiles.setToolTipText("Bulk rename all linked files in the project");
+        openProjectFolder.setToolTipText("Open the project folder in file explorer");
         
         refreshList.addActionListener(e -> refreshConversionList());
         exportProject.addActionListener(e -> exportProjectAsJson());
@@ -541,15 +551,13 @@ public class ProjectFrame extends JFrame {
         // Add search field
         searchField = new JTextField();
         searchField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
-        searchField.setFont(Theme.NORMAL_FONT);
-        searchField.setForeground(Theme.TEXT);
-        searchField.setBackground(Theme.SURFACE.darker());
-        searchField.setCaretColor(Theme.TEXT);
+        Theme.styleTextField(searchField);
         searchField.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(Theme.BORDER),
             BorderFactory.createEmptyBorder(5, 5, 5, 5)
         ));
         searchField.putClientProperty("JTextField.placeholderText", "Search conversions...");
+        searchField.setToolTipText("Type to filter conversions by name (Ctrl+F to focus)");
         searchField.addKeyListener(new KeyAdapter() {
             @Override
             public void keyReleased(KeyEvent e) {
@@ -565,6 +573,7 @@ public class ProjectFrame extends JFrame {
         sortBy.setFont(Theme.NORMAL_FONT);
         sortBy.setForeground(Color.BLACK);
         sortBy.setSelectedItem("Natural Sort"); // Set Natural Sort as default
+        sortBy.setToolTipText("Sort conversions by different criteria");
         
         sortBy.addActionListener(e -> {
             conversionListPanel.removeAll();
@@ -579,6 +588,44 @@ public class ProjectFrame extends JFrame {
             conversionListPanel.repaint();
         });
         sidebar.add(sortBy);
+        sidebar.add(Box.createVerticalStrut(10));
+
+        // Add New Conversion button
+        newConversion = new JButton("+ New Conversion");
+        newConversion.setFont(Theme.NORMAL_FONT.deriveFont(Font.BOLD, 16f));
+        newConversion.setForeground(Color.WHITE);
+        newConversion.setBackground(new Color(40, 167, 69)); // Green accent for creation
+        newConversion.setFocusPainted(false);
+        newConversion.setBorderPainted(false);
+        newConversion.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35)); // Match conversion button height
+        newConversion.setHorizontalAlignment(SwingConstants.LEFT); // Match conversion button alignment
+        newConversion.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10)); // Match conversion button padding
+        newConversion.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        newConversion.setToolTipText("Create a new media conversion (Ctrl+N)");
+        newConversion.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
+        newConversion.setPreferredSize(new Dimension(100, 40));
+        
+        // Add hover effects similar to conversion buttons
+        newConversion.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                newConversion.setBackground(new Color(50, 177, 79)); // Slightly brighter green on hover
+            }
+            public void mouseExited(MouseEvent e) {
+                newConversion.setBackground(new Color(40, 167, 69)); // Back to original green
+            }
+        });
+        
+        newConversion.addActionListener(e -> {
+            String name = JOptionPane.showInputDialog(this, "Enter a name for the new conversion:", "New Conversion", JOptionPane.PLAIN_MESSAGE);
+            if (name != null && !name.trim().isEmpty()) {
+                Conversion newConv = new Conversion(name.trim());
+                project.addConversion(newConv);
+                addConversionToSidebar(newConv);
+                showConversionDetails(newConv);
+                markUnsavedChanges();
+            }
+        });
+        sidebar.add(newConversion);
         sidebar.add(Box.createVerticalStrut(10));
 
         // Add quick action bar
@@ -743,6 +790,22 @@ public class ProjectFrame extends JFrame {
         Theme.styleButton(conversionBtn);
         conversionBtn.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10)); // Add padding
         updateConversionButtonStyle(conversionBtn, conversion, false);
+        
+        // Add tooltip with status and file information
+        String tooltipText = "Status: " + conversion.status.toString();
+        if (conversion.linkedFiles != null && !conversion.linkedFiles.isEmpty()) {
+            tooltipText += "\nFiles: " + conversion.linkedFiles.size() + " linked";
+            if (conversion.duration != null && !conversion.duration.isZero()) {
+                tooltipText += "\nDuration: " + formatDuration(conversion.duration);
+            }
+        } else {
+            tooltipText += "\nNo files linked";
+        }
+        if (!conversion.note.isEmpty()) {
+            tooltipText += "\nNote: " + conversion.note;
+        }
+        tooltipText += "\nRight-click for more options";
+        conversionBtn.setToolTipText(tooltipText);
         
         // Add click handler with selection state
         conversionBtn.addActionListener(e -> {
@@ -1000,6 +1063,7 @@ public class ProjectFrame extends JFrame {
         statusBar.setPreferredSize(new Dimension(-1, 25));
         Theme.stylePanel(statusBar);
         statusBar.setBorder(BorderFactory.createEmptyBorder(2, 10, 2, 10));
+        statusBar.setToolTipText("Project progress and file statistics");
         
         JLabel progressLabel = new JLabel();
         progressLabel.setForeground(Theme.TEXT_SECONDARY);
@@ -1312,6 +1376,10 @@ public class ProjectFrame extends JFrame {
         
         JMenuItem duplicate = new JMenuItem("Duplicate");
         JMenuItem delete = new JMenuItem("Delete");
+        
+        // Add tooltips to context menu items
+        duplicate.setToolTipText("Create a copy of this conversion with the same settings");
+        delete.setToolTipText("Permanently delete this conversion (cannot be undone)");
         
         duplicate.addActionListener(e -> {
             Conversion newConversion = new Conversion(conversion.name + " (Copy)");

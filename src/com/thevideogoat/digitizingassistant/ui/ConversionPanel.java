@@ -94,6 +94,7 @@ public class ConversionPanel extends JPanel {
         typeSelector = new JComboBox<>(Type.values());
         if (conversion.type != null) typeSelector.setSelectedItem(conversion.type);
         typeSelector.setPreferredSize(new Dimension(150, 30));
+        typeSelector.setFont(Theme.NORMAL_FONT.deriveFont(18f));
         typeRow.add(type);
         typeRow.add(Box.createHorizontalStrut(10));
         typeRow.add(typeSelector);
@@ -109,6 +110,7 @@ public class ConversionPanel extends JPanel {
         noteField = new JTextField(conversion.note);
         noteField.setPreferredSize(new Dimension(400, 30));
         Theme.styleTextField(noteField);
+        noteField.setFont(Theme.NORMAL_FONT.deriveFont(18f));
         
         noteRow.add(note);
         noteRow.add(Box.createHorizontalStrut(10));
@@ -602,6 +604,7 @@ public class ConversionPanel extends JPanel {
         tapeDurationSpinner = new JSpinner(new SpinnerNumberModel(
             (int) conversion.duration.toMinutes(), 0, Integer.MAX_VALUE, 1));
         tapeDurationSpinner.setPreferredSize(new Dimension(100, 30));
+        tapeDurationSpinner.setFont(Theme.NORMAL_FONT.deriveFont(18f));
 
         // status
         statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -622,6 +625,7 @@ public class ConversionPanel extends JPanel {
         statusSelector = new JComboBox<>(ConversionStatus.values());
         statusSelector.setSelectedItem(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
         statusSelector.setPreferredSize(new Dimension(150, 30));
+        statusSelector.setFont(Theme.NORMAL_FONT.deriveFont(18f));
 
         StatusIndicator statusIndicator = new StatusIndicator();
         statusSelector.addActionListener(e -> {
