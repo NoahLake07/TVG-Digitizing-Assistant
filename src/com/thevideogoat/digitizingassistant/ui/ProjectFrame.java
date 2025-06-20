@@ -1104,11 +1104,8 @@ public class ProjectFrame extends JFrame {
             String progressText = String.format("Completed: %d/%d (%.1f%%)", 
                 completed, total, (completed * 100.0) / Math.max(1, total));
             
-            // Calculate total size of linked files
-            long totalSize = project.getConversions().stream()
-                .flatMap(c -> c.linkedFiles != null ? c.linkedFiles.stream() : Stream.empty())
-                .mapToLong(File::length)
-                .sum();
+            // Calculate total size including subdirectories
+            long totalSize = calculateTotalSizeIncludingSubdirectories();
                 
             String sizeText = String.format("Total Size: %s", formatSize(totalSize));
             
@@ -1127,6 +1124,80 @@ public class ProjectFrame extends JFrame {
                     saveLabel.setForeground(Theme.TEXT_SECONDARY);
                 }
                 ((JLabel)components[1]).setText(sizeText);
+            }
+        }
+    }
+
+    /**
+     * Calculate total size of all linked files and their subdirectories
+     */
+    private long calculateTotalSizeIncludingSubdirectories() {
+        long totalSize = 0;
+        
+        for (Conversion conversion : project.getConversions()) {
+            if (conversion.linkedFiles != null) {
+                for (File file : conversion.linkedFiles) {
+                    if (file.exists()) {
+                        if (file.isFile()) {
+                            // Add size of the file itself
+                            totalSize += file.length();
+                        } else if (file.isDirectory()) {
+                            // Recursively calculate size of all files in directory
+                            totalSize += calculateDirectorySize(file);
+                        }
+                    }
+                }
+            }
+        }
+        
+        return totalSize;
+    }
+
+    /**
+     * Recursively calculate the total size of all files in a directory
+     */
+    private long calculateDirectorySize(File directory) {
+        long size = 0;
+        
+        if (directory.exists() && directory.isDirectory()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile()) {
+                        size += file.length();
+                    } else if (file.isDirectory()) {
+                        // Recursively calculate subdirectory size
+                        size += calculateDirectorySize(file);
+                    }
+                }
+            }
+        }
+        
+        return size;
+    }
+
+    /**
+     * Recursively process a directory for statistics (file count, size, and type breakdown)
+     */
+    private void processDirectoryForStatisticsRecursive(File directory, int totalFiles, long totalSize, 
+                                                       Map<String, Integer> typeCount, Map<String, Long> typeSize) {
+        if (directory.exists() && directory.isDirectory()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile()) {
+                        totalFiles++;
+                        long size = file.length();
+                        totalSize += size;
+
+                        String type = getExtension(file).toLowerCase();
+                        typeCount.merge(type, 1, Integer::sum);
+                        typeSize.merge(type, size, Long::sum);
+                    } else if (file.isDirectory()) {
+                        // Recursively process subdirectories
+                        processDirectoryForStatisticsRecursive(file, totalFiles, totalSize, typeCount, typeSize);
+                    }
+                }
             }
         }
     }
@@ -1220,18 +1291,23 @@ public class ProjectFrame extends JFrame {
         Map<String, Integer> typeCount = new HashMap<>();
         Map<String, Long> typeSize = new HashMap<>();
 
-        // Process all linked files
+        // Process all linked files and their subdirectories
         for (Conversion conversion : project.getConversions()) {
             if (conversion.linkedFiles != null) {
                 for (File file : conversion.linkedFiles) {
-                    if (file.isFile()) {
-                        totalFiles++;
-                        long size = file.length();
-                        totalSize += size;
+                    if (file.exists()) {
+                        if (file.isFile()) {
+                            totalFiles++;
+                            long size = file.length();
+                            totalSize += size;
 
-                        String type = getExtension(file).toLowerCase();
-                        typeCount.merge(type, 1, Integer::sum);
-                        typeSize.merge(type, size, Long::sum);
+                            String type = getExtension(file).toLowerCase();
+                            typeCount.merge(type, 1, Integer::sum);
+                            typeSize.merge(type, size, Long::sum);
+                        } else if (file.isDirectory()) {
+                            // Process all files in directory recursively
+                            processDirectoryForStatisticsRecursive(file, totalFiles, totalSize, typeCount, typeSize);
+                        }
                     }
                 }
             }
