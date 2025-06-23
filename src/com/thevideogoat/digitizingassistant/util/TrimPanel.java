@@ -1,6 +1,7 @@
 package com.thevideogoat.digitizingassistant.util;
 
 import com.thevideogoat.digitizingassistant.data.Conversion;
+import com.thevideogoat.digitizingassistant.data.Preferences;
 import com.thevideogoat.digitizingassistant.ui.TrimWindow;
 import org.bytedeco.javacv.*;
 import org.bytedeco.javacv.Frame;
@@ -352,6 +353,13 @@ public class TrimPanel extends JPanel {
     private void exportTrimmed() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Trimmed Media");
+        
+        // Set the current directory to the last used directory
+        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir != null && new File(lastDir).exists()) {
+            fileChooser.setCurrentDirectory(new File(lastDir));
+        }
+        
         int result = fileChooser.showSaveDialog(this);
         if (result != JFileChooser.APPROVE_OPTION) {
             return; // user canceled
@@ -360,6 +368,12 @@ public class TrimPanel extends JPanel {
         File outFile = fileChooser.getSelectedFile();
         if (outFile == null) {
             return;
+        }
+        
+        // Save the parent directory as the last used directory
+        File parentDir = outFile.getParentFile();
+        if (parentDir != null && parentDir.exists()) {
+            Preferences.getInstance().setLastUsedDirectory(parentDir.getAbsolutePath());
         }
 
         double startSec = startSlider.getValue() * SLIDER_INCREMENT;
@@ -415,7 +429,7 @@ public class TrimPanel extends JPanel {
 
             // Try to get the original video bitrate
             int origVideoBitrate = grabber.getVideoBitrate();  // bits/sec
-            // If the grabber doesn’t report a valid bitrate, pick a fallback
+            // If the grabber doesn't report a valid bitrate, pick a fallback
             if (origVideoBitrate <= 0) {
                 origVideoBitrate = 10_000_000; // e.g., 10 Mbps fallback
             }
@@ -487,7 +501,7 @@ public class TrimPanel extends JPanel {
 
             // Try to get the original video bitrate
             int origVideoBitrate = grabber.getVideoBitrate();  // bits/sec
-            // If the grabber doesn’t report a valid bitrate, pick a fallback
+            // If the grabber doesn't report a valid bitrate, pick a fallback
             if (origVideoBitrate <= 0) {
                 origVideoBitrate = 10_000_000; // e.g., 10 Mbps fallback
             }

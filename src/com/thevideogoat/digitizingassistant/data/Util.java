@@ -1,6 +1,7 @@
 package com.thevideogoat.digitizingassistant.data;
 
 import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
+import com.thevideogoat.digitizingassistant.data.Preferences;
 
 import javax.swing.*;
 import java.io.File;
@@ -82,10 +83,20 @@ public class Util {
         // Prompt the user to select a new directory
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        
+        // Set the current directory to the last used directory
+        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir != null && new File(lastDir).exists()) {
+            fileChooser.setCurrentDirectory(new File(lastDir));
+        }
+        
         int result = fileChooser.showOpenDialog(null);
 
         if (result == JFileChooser.APPROVE_OPTION) {
             File newDirectory = fileChooser.getSelectedFile();
+            
+            // Save the selected directory as the last used directory
+            Preferences.getInstance().setLastUsedDirectory(newDirectory.getAbsolutePath());
 
             // For each conversion in the project
             int i = 0, f = 0;
@@ -283,10 +294,20 @@ public class Util {
         // Prompt the user to select the directory containing trimmed files
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        
+        // Set the current directory to the last used directory
+        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir != null && new File(lastDir).exists()) {
+            fileChooser.setCurrentDirectory(new File(lastDir));
+        }
+        
         int result = fileChooser.showOpenDialog(null);
 
         if (result == JFileChooser.APPROVE_OPTION) {
             File trimmedDirectory = fileChooser.getSelectedFile();
+            
+            // Save the selected directory as the last used directory
+            Preferences.getInstance().setLastUsedDirectory(trimmedDirectory.getAbsolutePath());
 
             // Create options dialog
             String[] options = {

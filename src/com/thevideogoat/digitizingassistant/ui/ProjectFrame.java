@@ -619,6 +619,8 @@ public class ProjectFrame extends JFrame {
             String name = JOptionPane.showInputDialog(this, "Enter a name for the new conversion:", "New Conversion", JOptionPane.PLAIN_MESSAGE);
             if (name != null && !name.trim().isEmpty()) {
                 Conversion newConv = new Conversion(name.trim());
+                // Set the conversion type to the last used type from preferences
+                newConv.type = Preferences.getInstance().getLastUsedConversionType();
                 project.addConversion(newConv);
                 addConversionToSidebar(newConv);
                 showConversionDetails(newConv);
@@ -1220,10 +1222,22 @@ public class ProjectFrame extends JFrame {
             fileChooser.setDialogTitle("Export Project");
             fileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
             
+            // Set the current directory to the last used directory
+            String lastDir = Preferences.getInstance().getLastUsedDirectory();
+            if (lastDir != null && new File(lastDir).exists()) {
+                fileChooser.setCurrentDirectory(new File(lastDir));
+            }
+            
             if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
                 File file = fileChooser.getSelectedFile();
                 if (!file.getName().toLowerCase().endsWith(".json")) {
                     file = new File(file.getParentFile(), file.getName() + ".json");
+                }
+                
+                // Save the parent directory as the last used directory
+                File parentDir = file.getParentFile();
+                if (parentDir != null && parentDir.exists()) {
+                    Preferences.getInstance().setLastUsedDirectory(parentDir.getAbsolutePath());
                 }
                 
                 JsonObject projectJson = new JsonObject();

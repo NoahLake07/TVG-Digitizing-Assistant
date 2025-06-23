@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Objects;
+import com.thevideogoat.digitizingassistant.data.Preferences;
 
 public class DigitizingAssistant {
 
@@ -289,6 +290,12 @@ public class DigitizingAssistant {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Import Project");
             fileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+            
+            // Set the current directory to the last used directory
+            String lastDir = Preferences.getInstance().getLastUsedDirectory();
+            if (lastDir != null && new File(lastDir).exists()) {
+                fileChooser.setCurrentDirectory(new File(lastDir));
+            }
             
             if (fileChooser.showOpenDialog(projectChooser) == JFileChooser.APPROVE_OPTION) {
                 try {

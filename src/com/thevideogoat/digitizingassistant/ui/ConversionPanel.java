@@ -4,6 +4,7 @@ import com.thevideogoat.digitizingassistant.data.Conversion;
 import com.thevideogoat.digitizingassistant.data.ConversionStatus;
 import com.thevideogoat.digitizingassistant.data.Type;
 import com.thevideogoat.digitizingassistant.data.Util;
+import com.thevideogoat.digitizingassistant.data.Preferences;
 
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
@@ -87,7 +88,7 @@ public class ConversionPanel extends JPanel {
         typeRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         typeRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
         typeRow.setBackground(Theme.BACKGROUND);
-        type = new JLabel("Tape Format Type");
+        type = new JLabel("Format Type");
         type.setForeground(Color.WHITE);
         type.setFont(Theme.NORMAL_FONT);
         
@@ -155,6 +156,12 @@ public class ConversionPanel extends JPanel {
                         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
                         fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
                         
+                        // Set the current directory to the last used directory
+                        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                        if (lastDir != null && new File(lastDir).exists()) {
+                            fileChooser.setCurrentDirectory(new File(lastDir));
+                        }
+                        
                         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File newLocation = fileChooser.getSelectedFile();
                             File newFile = new File(newLocation, selectedFile.getName());
@@ -216,6 +223,12 @@ public class ConversionPanel extends JPanel {
                         JFileChooser fileChooser = new JFileChooser();
                         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
                         fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                        
+                        // Set the current directory to the last used directory
+                        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                        if (lastDir != null && new File(lastDir).exists()) {
+                            fileChooser.setCurrentDirectory(new File(lastDir));
+                        }
                         
                         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File newLocation = fileChooser.getSelectedFile();
@@ -311,6 +324,12 @@ public class ConversionPanel extends JPanel {
                 JFileChooser fileChooser = new JFileChooser();
                 fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
                 fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                
+                // Set the current directory to the last used directory
+                String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                if (lastDir != null && new File(lastDir).exists()) {
+                    fileChooser.setCurrentDirectory(new File(lastDir));
+                }
                 
                 if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                     File newLocation = fileChooser.getSelectedFile();
@@ -687,6 +706,13 @@ public class ConversionPanel extends JPanel {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setMultiSelectionEnabled(true);
             fileChooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
+            
+            // Set the current directory to the last used directory
+            String lastDir = Preferences.getInstance().getLastUsedDirectory();
+            if (lastDir != null && new File(lastDir).exists()) {
+                fileChooser.setCurrentDirectory(new File(lastDir));
+            }
+            
             int result = fileChooser.showOpenDialog(this);
             
             if (result == JFileChooser.APPROVE_OPTION) {
@@ -696,6 +722,16 @@ public class ConversionPanel extends JPanel {
                         conversion.linkedFiles.add(file);
                     }
                 }
+                
+                // Save the parent directory of the first selected file as the last used directory
+                if (selectedFiles.length > 0) {
+                    File firstFile = selectedFiles[0];
+                    File parentDir = firstFile.getParentFile();
+                    if (parentDir != null && parentDir.exists()) {
+                        Preferences.getInstance().setLastUsedDirectory(parentDir.getAbsolutePath());
+                    }
+                }
+                
                 updateLinkedFiles();
                 projectFrame.markUnsavedChanges();
             }
@@ -749,6 +785,11 @@ public class ConversionPanel extends JPanel {
         // type selector
         typeSelector.addActionListener(e -> {
             projectFrame.markUnsavedChanges();
+            // Save the selected type to preferences
+            Type selectedType = (Type) typeSelector.getSelectedItem();
+            if (selectedType != null) {
+                Preferences.getInstance().setLastUsedConversionType(selectedType);
+            }
         });
 
         // note field

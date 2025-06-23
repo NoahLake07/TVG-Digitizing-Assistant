@@ -6,6 +6,7 @@ import com.thevideogoat.digitizingassistant.data.Util;
 import com.thevideogoat.digitizingassistant.util.ExportTask;
 import com.thevideogoat.digitizingassistant.util.TaskQueue;
 import com.thevideogoat.digitizingassistant.util.TrimPanel;
+import com.thevideogoat.digitizingassistant.data.Preferences;
 
 import javax.swing.*;
 import java.awt.*;
@@ -166,11 +167,23 @@ public class TrimWindow extends JFrame {
             if (result == JOptionPane.OK_OPTION) {
                 JFileChooser chooser = new JFileChooser();
                 chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                
+                // Set the current directory to the last used directory
+                String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                if (lastDir != null && new File(lastDir).exists()) {
+                    chooser.setCurrentDirectory(new File(lastDir));
+                }
+                
                 int chooserResult = chooser.showOpenDialog(null);
                 if (chooserResult != JFileChooser.APPROVE_OPTION) {
                     return;
                 }
-                queue.setExportLoc(chooser.getSelectedFile().toPath());
+                File selectedDir = chooser.getSelectedFile();
+                queue.setExportLoc(selectedDir.toPath());
+                
+                // Save the selected directory as the last used directory
+                Preferences.getInstance().setLastUsedDirectory(selectedDir.getAbsolutePath());
+                
                 queue.exportAll();
                 initExport();
             }
@@ -331,8 +344,19 @@ public class TrimWindow extends JFrame {
             exportNow.addActionListener(e -> {
                 JFileChooser chooser = new JFileChooser();
                 chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                
+                // Set the current directory to the last used directory
+                String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                if (lastDir != null && new File(lastDir).exists()) {
+                    chooser.setCurrentDirectory(new File(lastDir));
+                }
+                
                 if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
                     File exportLoc = chooser.getSelectedFile();
+                    
+                    // Save the selected directory as the last used directory
+                    Preferences.getInstance().setLastUsedDirectory(exportLoc.getAbsolutePath());
+                    
                     trimmer.getTask(linkedConversion).export(exportLoc.toPath(),null); // ! MAKE PROG. LIST. NOT NULL WHEN RE-ENABLING EXPORT NOW
                 }
             });
