@@ -35,13 +35,14 @@ public class Util {
             return;
         }
 
-        ListIterator<File> iterator = c.linkedFiles.listIterator();
+        ListIterator<FileReference> iterator = c.linkedFiles.listIterator();
         int i = 0;
         while(iterator.hasNext()){
-            File f = iterator.next();
+            FileReference fileRef = iterator.next();
             ++i;
             // Rename the file and replace it in the list
-            iterator.set(renameFile(f, c.name + (i > 1 ? " (" + i + ")" : "")));
+            File renamedFile = renameFile(fileRef.getFile(), c.name + (i > 1 ? " (" + i + ")" : ""));
+            iterator.set(new FileReference(renamedFile));
         }
 
         // Completion dialog
@@ -53,13 +54,14 @@ public class Util {
             return;
         }
 
-        ListIterator<File> iterator = c.linkedFiles.listIterator();
+        ListIterator<FileReference> iterator = c.linkedFiles.listIterator();
         int i = 0;
         while(iterator.hasNext()){
-            File f = iterator.next();
+            FileReference fileRef = iterator.next();
             ++i;
             // Rename the file and replace it in the list
-            iterator.set(renameFile(f, c.note + (i > 1 ? " (" + i + ")" : "")));
+            File renamedFile = renameFile(fileRef.getFile(), c.note + (i > 1 ? " (" + i + ")" : ""));
+            iterator.set(new FileReference(renamedFile));
         }
 
         // Completion dialog
@@ -101,15 +103,15 @@ public class Util {
             // For each conversion in the project
             int i = 0, f = 0;
             for (Conversion conversion : project.getConversions()) {
-                ArrayList<File> updatedFiles = new ArrayList<>();
+                ArrayList<FileReference> updatedFiles = new ArrayList<>();
 
                 // For each linked file in the conversion
-                for (File oldFile : conversion.linkedFiles) {
+                for (FileReference oldFile : conversion.linkedFiles) {
                     File newFile = new File(newDirectory, oldFile.getName());
 
                     // If a file with the same name is found in the new directory
                     if (newFile.exists()) {
-                        updatedFiles.add(newFile);
+                        updatedFiles.add(new FileReference(newFile));
                         i++;
                     } else {
                         // If not found, keep the old file reference
@@ -211,19 +213,19 @@ public class Util {
         return name.endsWith(".mp4") || name.endsWith(".avi") || name.endsWith(".mov") || name.endsWith(".mkv") || name.endsWith(".flv") || name.endsWith(".wmv");
     }
 
-    public static ArrayList<File> getLinkedFiles(Project p){
-        ArrayList<File> linkedFiles = new ArrayList<>();
+    public static ArrayList<FileReference> getLinkedFiles(Project p){
+        ArrayList<FileReference> linkedFiles = new ArrayList<>();
         for (Conversion conversion : p.conversions) {
             linkedFiles.addAll(conversion.linkedFiles);
         }
         return linkedFiles;
     }
 
-    public static ArrayList<File> getVideoFiles(Project p){
-        ArrayList<File> videoFiles = new ArrayList<>();
-        for (File file : getLinkedFiles(p)) {
-            if (Util.isVideoFile(file)) {
-                videoFiles.add(file);
+    public static ArrayList<FileReference> getVideoFiles(Project p){
+        ArrayList<FileReference> videoFiles = new ArrayList<>();
+        for (FileReference fileRef : getLinkedFiles(p)) {
+            if (Util.isVideoFile(fileRef.getFile())) {
+                videoFiles.add(fileRef);
             }
         }
         return videoFiles;
@@ -255,6 +257,24 @@ public class Util {
             "Renamed " + renamedCount + " files/directories.", 
             "Rename Success", 
             JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    // Adapter method for FileReference support
+    public static void renameFilesWithOptionsFromReferences(ArrayList<FileReference> fileRefs, String newName, 
+        boolean includeSubdirectories, boolean preserveNumbering) {
+        
+        if (fileRefs.isEmpty()) {
+            return;
+        }
+
+        // Convert FileReferences to Files
+        ArrayList<File> files = new ArrayList<>();
+        for (FileReference fileRef : fileRefs) {
+            files.add(fileRef.getFile());
+        }
+        
+        // Call the original method
+        renameFilesWithOptions(files, newName, includeSubdirectories, preserveNumbering);
     }
 
     private static String preserveNumberInFilename(String oldName, String newName) {
@@ -329,14 +349,14 @@ public class Util {
             int replacedCount = 0;
             int addedCount = 0;
             int removedCount = 0;
-            ArrayList<File> filesToRemove = new ArrayList<>();
+            ArrayList<FileReference> filesToRemove = new ArrayList<>();
 
             // For each conversion in the project
             for (Conversion conversion : project.getConversions()) {
-                ArrayList<File> updatedFiles = new ArrayList<>();
+                ArrayList<FileReference> updatedFiles = new ArrayList<>();
 
                 // For each linked file in the conversion
-                for (File oldFile : conversion.linkedFiles) {
+                for (FileReference oldFile : conversion.linkedFiles) {
                     String oldName = oldFile.getName();
                     String baseName = oldName.substring(0, oldName.lastIndexOf('.'));
                     String extension = oldName.substring(oldName.lastIndexOf('.'));
@@ -349,12 +369,12 @@ public class Util {
                     if (trimmedFile.exists()) {
                         if (choice == 0) {
                             // Option 1: Replace matching files
-                            updatedFiles.add(trimmedFile);
+                            updatedFiles.add(new FileReference(trimmedFile));
                             replacedCount++;
                         } else {
                             // Option 2: Add trimmed files to existing
                             updatedFiles.add(oldFile);
-                            updatedFiles.add(trimmedFile);
+                            updatedFiles.add(new FileReference(trimmedFile));
                             addedCount++;
                         }
                     } else {

@@ -1,5 +1,6 @@
 package com.thevideogoat.digitizingassistant.ui;
 
+import com.thevideogoat.digitizingassistant.data.FileReference;
 import com.thevideogoat.digitizingassistant.data.Project;
 import com.thevideogoat.digitizingassistant.data.Conversion;
 import com.google.gson.GsonBuilder;
@@ -26,7 +27,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.4";
+    public static final String VERSION = "1.5";
 
     private static DigitizingAssistant instance;
 
@@ -381,8 +382,8 @@ public class DigitizingAssistant {
                                             // Add linked files
                                             JsonArray linkedFilesArray = new JsonArray();
                                             if (conversion.linkedFiles != null) {
-                                                for (File file : conversion.linkedFiles) {
-                                                    linkedFilesArray.add(file.getAbsolutePath());
+                                                for (FileReference fileRef : conversion.linkedFiles) {
+                                                    linkedFilesArray.add(fileRef.getPath());
                                                 }
                                             }
                                             conversionJson.add("linkedFiles", linkedFilesArray);
@@ -491,57 +492,62 @@ public class DigitizingAssistant {
         }
 
         if (showWelcome) {
-            // Show welcome message for version 1.4
+            // Show welcome message for version 1.5
             JPanel welcomePanel = new JPanel(new BorderLayout(10, 10));
-            welcomePanel.setBackground(Theme.SURFACE);
+            welcomePanel.setBackground(Color.WHITE);
             welcomePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
             
             // Header
             JLabel header = new JLabel("Welcome to Digitizing Assistant v" + VERSION);
-            header.setFont(Theme.HEADER_FONT);
-            header.setForeground(Theme.TEXT);
+            header.setFont(new Font("Segoe UI", Font.BOLD, 18));
+            header.setForeground(Color.BLACK);
             welcomePanel.add(header, BorderLayout.NORTH);
             
             // Content
             JPanel contentPanel = new JPanel();
             contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
-            contentPanel.setBackground(Theme.SURFACE);
+            contentPanel.setBackground(Color.WHITE);
             
             // New Features
             JLabel featuresHeader = new JLabel("New Features:");
-            featuresHeader.setFont(Theme.NORMAL_FONT.deriveFont(Font.BOLD));
-            featuresHeader.setForeground(Theme.TEXT);
+            featuresHeader.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            featuresHeader.setForeground(Color.BLACK);
             contentPanel.add(featuresHeader);
             contentPanel.add(Box.createVerticalStrut(10));
             
             String[] features = {
-                "• New JSON project format for better compatibility",
-                "• Automatic upgrade path for old projects",
-                "• Quick access to project folder",
-                "• Improved project import/export",
-                "• New tools launcher for common applications"
+                "• Data-Only Conversions: Mark conversions as pure data storage",
+                "• Misc Data Storage Format: For SD cards, hard drives, etc.",
+                "• Technician Notes: Internal logging field for observations",
+                "• File Map Visualization: Hierarchical view of linked files and contents",
+                "• Professional Export System: 'Write to Destination' for client delivery",
+                "• Auto-Sort: Conversions automatically sorted on save",
+                "• Silent Saves: Removed confirmation dialogs for smoother workflow",
+                "• Enhanced File Management: Better bulk operations and relinking"
             };
             
             for (String feature : features) {
                 JLabel featureLabel = new JLabel(feature);
-                featureLabel.setFont(Theme.NORMAL_FONT);
-                featureLabel.setForeground(Theme.TEXT);
+                featureLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+                featureLabel.setForeground(Color.BLACK);
                 contentPanel.add(featureLabel);
                 contentPanel.add(Box.createVerticalStrut(5));
             }
             
-            contentPanel.add(Box.createVerticalStrut(10));
+            contentPanel.add(Box.createVerticalStrut(15));
             
-            // Note about project format
-            JLabel noteLabel = new JLabel("<html><body style='width: 300px'>" +
-                "<b>Note:</b> Projects are now saved in JSON format. Old projects will be automatically upgraded when opened.</body></html>");
-            noteLabel.setFont(Theme.NORMAL_FONT);
-            noteLabel.setForeground(Theme.TEXT);
+            // Note about new capabilities
+            JLabel noteLabel = new JLabel("<html><body style='width: 400px'>" +
+                "<b>Professional Workflow:</b> Version 1.5 transforms the app into a complete project delivery system. " +
+                "Use the new export feature to create professional client deliveries with proper folder structure and file organization. " +
+                "The new File Map feature provides a clear view of your project structure and file contents.</body></html>");
+            noteLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            noteLabel.setForeground(Color.BLACK);
             contentPanel.add(noteLabel);
             
             welcomePanel.add(contentPanel, BorderLayout.CENTER);
             
-            // Show dialog
+            // Show dialog with light mode styling
             JOptionPane.showMessageDialog(null, welcomePanel, "Welcome to Digitizing Assistant", JOptionPane.PLAIN_MESSAGE);
             
             // Save the version to prevent showing the message again

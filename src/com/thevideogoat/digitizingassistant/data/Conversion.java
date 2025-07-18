@@ -11,14 +11,15 @@ public class Conversion implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 7899114141134424890L;
-    public String name, note;
+    public String name, note, technicianNotes;
     public Type type;
-    public ArrayList<File> linkedFiles;
+    public ArrayList<FileReference> linkedFiles;
     public Date dateOfConversion;
     public Time timeOfConversion;
     public ConversionStatus status;
     public String version;
     public Duration duration = Duration.ZERO;
+    public boolean isDataOnly = false;
 
     public Conversion(String name){
         // assign name
@@ -26,6 +27,7 @@ public class Conversion implements Serializable {
 
         // assign default values
         this.note = "";
+        this.technicianNotes = "";
         this.type = Type.VHS;
         this.linkedFiles = new ArrayList<>();
         dateOfConversion = new Date();
@@ -33,6 +35,7 @@ public class Conversion implements Serializable {
         duration = Duration.ZERO;
         status = ConversionStatus.NOT_STARTED;
         version = DigitizingAssistant.VERSION;
+        isDataOnly = false;
     }
 
     @Serial
@@ -41,6 +44,11 @@ public class Conversion implements Serializable {
         if (status == null) {
             status = ConversionStatus.NOT_STARTED;
         }
+        // Handle legacy conversions that don't have the new fields
+        if (technicianNotes == null) {
+            technicianNotes = "";
+        }
+        // isDataOnly defaults to false for legacy conversions
     }
 
     public Color getStatusColor() {

@@ -1,7 +1,6 @@
 package com.thevideogoat.digitizingassistant.ui;
 
 import com.thevideogoat.digitizingassistant.data.*;
-import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -17,21 +16,21 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseMotionListener;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.FileOutputStream;
-import java.io.ObjectOutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.util.stream.Stream;
+
+import com.thevideogoat.digitizingassistant.data.FileReference;
+import com.thevideogoat.digitizingassistant.util.FileCacheManager;
 
 public class ProjectFrame extends JFrame {
 
@@ -152,7 +151,7 @@ public class ProjectFrame extends JFrame {
         mediaStats.addActionListener(e -> showMediaStatistics());
         relinkTrimmed.addActionListener(e -> Util.relinkToTrimmedFiles(project));
         findAndRelinkTrimmed.addActionListener(e -> {
-            ArrayList<File> allFiles = Util.getLinkedFiles(project);
+            ArrayList<FileReference> allFiles = Util.getLinkedFiles(project);
             if (allFiles.isEmpty()) {
                 JOptionPane.showMessageDialog(this,
                     "No files are linked to search for trimmed versions.",
@@ -163,12 +162,12 @@ public class ProjectFrame extends JFrame {
 
             // Get all unique parent directories
             Set<File> parentDirs = new HashSet<>();
-            for (File file : allFiles) {
-                parentDirs.add(file.getParentFile());
+            for (FileReference fileRef : allFiles) {
+                parentDirs.add(fileRef.getParentFile());
             }
             
             // Search each parent directory and its subdirectories
-            Map<File, File> trimmedFileMap = new HashMap<>();
+            Map<FileReference, File> trimmedFileMap = new HashMap<>();
             for (File parentDir : parentDirs) {
                 if (parentDir != null && parentDir.exists()) {
                     searchForTrimmedFiles(parentDir, allFiles, trimmedFileMap);
@@ -185,7 +184,7 @@ public class ProjectFrame extends JFrame {
 
             // Show preview of files to be relinked
             StringBuilder preview = new StringBuilder("Found the following trimmed files:\n\n");
-            for (Map.Entry<File, File> entry : trimmedFileMap.entrySet()) {
+            for (Map.Entry<FileReference, File> entry : trimmedFileMap.entrySet()) {
                 preview.append(entry.getKey().getName())
                       .append(" → ")
                       .append(entry.getValue().getName())
@@ -204,18 +203,18 @@ public class ProjectFrame extends JFrame {
                 logFileOperation("START RELINK OPERATION", "Relinking " + trimmedFileMap.size() + " files to their trimmed versions");
                 
                 // Relink the files
-                for (Map.Entry<File, File> entry : trimmedFileMap.entrySet()) {
-                    File originalFile = entry.getKey();
+                for (Map.Entry<FileReference, File> entry : trimmedFileMap.entrySet()) {
+                    FileReference originalFileRef = entry.getKey();
                     File trimmedFile = entry.getValue();
                     
                     // Find and update the file in all conversions
                     for (Conversion c : project.getConversions()) {
-                        int index = c.linkedFiles.indexOf(originalFile);
+                        int index = c.linkedFiles.indexOf(originalFileRef);
                         if (index != -1) {
-                            c.linkedFiles.set(index, trimmedFile);
+                            c.linkedFiles.set(index, new FileReference(trimmedFile));
                             // Log each relink operation
                             logFileOperation("RELINK", 
-                                "Original: " + originalFile.getAbsolutePath() + 
+                                "Original: " + originalFileRef.getPath() + 
                                 " → New: " + trimmedFile.getAbsolutePath() +
                                 " (Conversion: " + c.name + ")");
                         }
@@ -272,7 +271,7 @@ public class ProjectFrame extends JFrame {
             if (renameChoice == 3 || renameChoice == JOptionPane.CLOSED_OPTION) return; // User cancelled
             
             // Get all files in the project
-            ArrayList<File> allFiles = Util.getLinkedFiles(project);
+            ArrayList<FileReference> allFiles = Util.getLinkedFiles(project);
             if (allFiles.isEmpty()) {
                 JOptionPane.showMessageDialog(this,
                     "No files are linked to rename.",
@@ -312,18 +311,18 @@ public class ProjectFrame extends JFrame {
                     // Rename to conversion names
                     for (Conversion c : project.getConversions()) {
                         if (!c.linkedFiles.isEmpty()) {
-                            ArrayList<File> originalFiles = new ArrayList<>(c.linkedFiles);
-                            Util.renameFilesWithOptions(
-                                c.linkedFiles,
-                                c.name,
-                                includeSubdirs.isSelected(),
-                                preserveNumbering.isSelected()
-                            );
+                            ArrayList<FileReference> originalFiles = new ArrayList<>(c.linkedFiles);
+                                                    Util.renameFilesWithOptionsFromReferences(
+                            c.linkedFiles,
+                            c.name,
+                            includeSubdirs.isSelected(),
+                            preserveNumbering.isSelected()
+                        );
                             updateLinkedFilesAfterRename(c, c.name);
                             for (int i = 0; i < originalFiles.size(); i++) {
                                 logFileOperation("RENAME", 
-                                    "Original: " + originalFiles.get(i).getAbsolutePath() + 
-                                    " → New: " + c.linkedFiles.get(i).getAbsolutePath() +
+                                    "Original: " + originalFiles.get(i).getPath() + 
+                                    " → New: " + c.linkedFiles.get(i).getPath() +
                                     " (Conversion: " + c.name + ")");
                             }
                         }
@@ -332,8 +331,8 @@ public class ProjectFrame extends JFrame {
                     // Rename to conversion notes
                     for (Conversion c : project.getConversions()) {
                         if (!c.linkedFiles.isEmpty() && !c.note.isEmpty()) {
-                            ArrayList<File> originalFiles = new ArrayList<>(c.linkedFiles);
-                            Util.renameFilesWithOptions(
+                            ArrayList<FileReference> originalFiles = new ArrayList<>(c.linkedFiles);
+                            Util.renameFilesWithOptionsFromReferences(
                                 c.linkedFiles,
                                 c.note,
                                 includeSubdirs.isSelected(),
@@ -342,8 +341,8 @@ public class ProjectFrame extends JFrame {
                             updateLinkedFilesAfterRename(c, c.note);
                             for (int i = 0; i < originalFiles.size(); i++) {
                                 logFileOperation("RENAME", 
-                                    "Original: " + originalFiles.get(i).getAbsolutePath() + 
-                                    " → New: " + c.linkedFiles.get(i).getAbsolutePath() +
+                                    "Original: " + originalFiles.get(i).getPath() + 
+                                    " → New: " + c.linkedFiles.get(i).getPath() +
                                     " (Conversion: " + c.name + ")");
                             }
                         }
@@ -355,9 +354,14 @@ public class ProjectFrame extends JFrame {
                         "Custom Filename",
                         JOptionPane.PLAIN_MESSAGE);
                     if (newName != null && !newName.trim().isEmpty()) {
-                        ArrayList<File> originalFiles = new ArrayList<>(allFiles);
+                        ArrayList<FileReference> originalFiles = new ArrayList<>(allFiles);
+                        // Convert FileReferences to Files for the rename operation
+                        ArrayList<File> filesToRename = new ArrayList<>();
+                        for (FileReference fileRef : allFiles) {
+                            filesToRename.add(fileRef.getFile());
+                        }
                         Util.renameFilesWithOptions(
-                            allFiles,
+                            filesToRename,
                             newName,
                             includeSubdirs.isSelected(),
                             preserveNumbering.isSelected()
@@ -368,8 +372,8 @@ public class ProjectFrame extends JFrame {
                         }
                         for (int i = 0; i < originalFiles.size(); i++) {
                             logFileOperation("RENAME", 
-                                "Original: " + originalFiles.get(i).getAbsolutePath() + 
-                                " → New: " + allFiles.get(i).getAbsolutePath());
+                                "Original: " + originalFiles.get(i).getPath() + 
+                                " → New: " + allFiles.get(i).getPath());
                         }
                     }
                 }
@@ -386,18 +390,17 @@ public class ProjectFrame extends JFrame {
         // Add menu item for relinking by conversion note
         JMenuItem relinkByNote = new JMenuItem("Relink by Conversion Note");
         relinkByNote.addActionListener(e -> {
-            // Gather all files in project directories
-            ArrayList<File> allFiles = getAllFilesInProjectDirectories();
+            ArrayList<FileReference> allFiles = getAllFilesInProjectDirectories();
             int relinked = 0;
             for (Conversion c : project.getConversions()) {
                 String noteNorm = normalizeFilename(c.note);
-                for (File f : allFiles) {
-                    String fileNorm = normalizeFilename(f.getName());
+                for (FileReference fileRef : allFiles) {
+                    String fileNorm = normalizeFilename(fileRef.getName());
                     if (!noteNorm.isEmpty() && fileNorm.contains(noteNorm)) {
                         c.linkedFiles.clear();
-                        c.linkedFiles.add(f);
+                        c.linkedFiles.add(fileRef);
                         relinked++;
-                        logFileOperation("RELINK BY NOTE", "Linked conversion '" + c.name + "' to file: " + f.getAbsolutePath());
+                        logFileOperation("RELINK BY NOTE", "Linked conversion '" + c.name + "' to file: " + fileRef.getPath());
                         break;
                     }
                 }
@@ -427,6 +430,13 @@ public class ProjectFrame extends JFrame {
         menu.add(relinkTrimmed);
         menu.add(findAndRelinkTrimmed);
         menu.add(renameProjectFiles);
+        
+        // Add Write Conversions To Destination menu item
+        JMenuItem writeToDestination = new JMenuItem("Write Conversions To Destination");
+        writeToDestination.setToolTipText("Export all conversions to a destination folder for client delivery");
+        writeToDestination.addActionListener(e -> showWriteToDestinationDialog());
+        menu.add(writeToDestination);
+        
         menu.addSeparator();
         menu.add(openProjectFolder);
         
@@ -941,6 +951,11 @@ public class ProjectFrame extends JFrame {
         }
 
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
+        
+        // Auto-sort conversions after saving
+        project.setConversions(Util.sortConversionsBy(project.getConversions(), "name"));
+        refreshConversionList();
+        
         updateButtonColors();
         updateStatusBar();
         
@@ -1106,28 +1121,46 @@ public class ProjectFrame extends JFrame {
             String progressText = String.format("Completed: %d/%d (%.1f%%)", 
                 completed, total, (completed * 100.0) / Math.max(1, total));
             
-            // Calculate total size including subdirectories
-            long totalSize = calculateTotalSizeIncludingSubdirectories();
+            // Calculate total size asynchronously with caching
+            calculateTotalSizeAsync().thenAccept(totalSize -> {
+                String sizeText = String.format("Total Size: %s", formatSize(totalSize));
                 
-            String sizeText = String.format("Total Size: %s", formatSize(totalSize));
-            
-            // Update status bar labels
-            Component[] components = statusBar.getComponents();
-            if (components.length >= 2) {
-                JPanel leftPanel = (JPanel) components[0];
-                JLabel progressLabel = (JLabel) leftPanel.getComponent(0);
-                JLabel saveLabel = (JLabel) leftPanel.getComponent(2);
-                
-                progressLabel.setText(progressText);
-                if (hasUnsavedChanges) {
-                    saveLabel.setForeground(new Color(255, 100, 100));
-                    saveLabel.setText("Changes not saved");
-                } else {
-                    saveLabel.setForeground(Theme.TEXT_SECONDARY);
-                }
-                ((JLabel)components[1]).setText(sizeText);
+                // Update status bar labels on EDT
+                SwingUtilities.invokeLater(() -> {
+                    Component[] components = statusBar.getComponents();
+                    if (components.length >= 2) {
+                        JPanel leftPanel = (JPanel) components[0];
+                        JLabel progressLabel = (JLabel) leftPanel.getComponent(0);
+                        JLabel saveLabel = (JLabel) leftPanel.getComponent(2);
+                        
+                        progressLabel.setText(progressText);
+                        if (hasUnsavedChanges) {
+                            saveLabel.setForeground(new Color(255, 100, 100));
+                            saveLabel.setText("Changes not saved");
+                        } else {
+                            saveLabel.setForeground(Theme.TEXT_SECONDARY);
+                        }
+                        ((JLabel)components[1]).setText(sizeText);
+                    }
+                });
+            });
+        }
+    }
+    
+    /**
+     * Calculate total size asynchronously using the cache manager
+     */
+    private CompletableFuture<Long> calculateTotalSizeAsync() {
+        FileCacheManager cacheManager = FileCacheManager.getInstance();
+        ArrayList<FileReference> allFiles = new ArrayList<>();
+        
+        for (Conversion conversion : project.getConversions()) {
+            if (conversion.linkedFiles != null) {
+                allFiles.addAll(conversion.linkedFiles);
             }
         }
+        
+        return cacheManager.calculateTotalSizeAsync(allFiles);
     }
 
     /**
@@ -1138,14 +1171,14 @@ public class ProjectFrame extends JFrame {
         
         for (Conversion conversion : project.getConversions()) {
             if (conversion.linkedFiles != null) {
-                for (File file : conversion.linkedFiles) {
+                for (FileReference file : conversion.linkedFiles) {
                     if (file.exists()) {
-                        if (file.isFile()) {
+                        if (file.getFile().isFile()) {
                             // Add size of the file itself
                             totalSize += file.length();
-                        } else if (file.isDirectory()) {
+                        } else if (file.getFile().isDirectory()) {
                             // Recursively calculate size of all files in directory
-                            totalSize += calculateDirectorySize(file);
+                            totalSize += calculateDirectorySize(file.getFile());
                         }
                     }
                 }
@@ -1192,7 +1225,7 @@ public class ProjectFrame extends JFrame {
                         long size = file.length();
                         totalSize += size;
 
-                        String type = getExtension(file).toLowerCase();
+                        String type = getExtension(new FileReference(file)).toLowerCase();
                         typeCount.merge(type, 1, Integer::sum);
                         typeSize.merge(type, size, Long::sum);
                     } else if (file.isDirectory()) {
@@ -1256,8 +1289,8 @@ public class ProjectFrame extends JFrame {
                     // Add linked files
                     JsonArray linkedFilesArray = new JsonArray();
                     if (conversion.linkedFiles != null) {
-                        for (File file1 : conversion.linkedFiles) {
-                            linkedFilesArray.add(file1.getAbsolutePath());
+                        for (FileReference file1 : conversion.linkedFiles) {
+                            linkedFilesArray.add(file1.getPath());
                         }
                     }
                     conversionJson.add("linkedFiles", linkedFilesArray);
@@ -1308,9 +1341,9 @@ public class ProjectFrame extends JFrame {
         // Process all linked files and their subdirectories
         for (Conversion conversion : project.getConversions()) {
             if (conversion.linkedFiles != null) {
-                for (File file : conversion.linkedFiles) {
+                for (FileReference file : conversion.linkedFiles) {
                     if (file.exists()) {
-                        if (file.isFile()) {
+                        if (file.getFile().isFile()) {
                             totalFiles++;
                             long size = file.length();
                             totalSize += size;
@@ -1318,9 +1351,9 @@ public class ProjectFrame extends JFrame {
                             String type = getExtension(file).toLowerCase();
                             typeCount.merge(type, 1, Integer::sum);
                             typeSize.merge(type, size, Long::sum);
-                        } else if (file.isDirectory()) {
+                        } else if (file.getFile().isDirectory()) {
                             // Process all files in directory recursively
-                            processDirectoryForStatisticsRecursive(file, totalFiles, totalSize, typeCount, typeSize);
+                            processDirectoryForStatisticsRecursive(file.getFile(), totalFiles, totalSize, typeCount, typeSize);
                         }
                     }
                 }
@@ -1544,7 +1577,7 @@ public class ProjectFrame extends JFrame {
     }
 
     // Improved helper method to recursively search for trimmed files
-    private void searchForTrimmedFiles(File directory, ArrayList<File> originalFiles, Map<File, File> trimmedFileMap) {
+    private void searchForTrimmedFiles(File directory, ArrayList<FileReference> originalFiles, Map<FileReference, File> trimmedFileMap) {
         File[] files = directory.listFiles();
         if (files != null) {
             for (File file : files) {
@@ -1556,14 +1589,14 @@ public class ProjectFrame extends JFrame {
                     if (trimmedName.contains("_trimmed")) {
                         String trimmedNorm = normalizeFilename(trimmedName.substring(0, trimmedName.indexOf("_trimmed")));
                         String trimmedNum = extractNumber(trimmedName);
-                        ArrayList<File> possibleMatches = new ArrayList<>();
-                        for (File originalFile : originalFiles) {
-                            String origName = originalFile.getName();
+                        ArrayList<FileReference> possibleMatches = new ArrayList<>();
+                        for (FileReference originalFileRef : originalFiles) {
+                            String origName = originalFileRef.getName();
                             String origNorm = normalizeFilename(origName);
                             String origNum = extractNumber(origName);
                             // Match if normalized base matches or number matches
                             if (origNorm.equals(trimmedNorm) || (!origNum.isEmpty() && origNum.equals(trimmedNum))) {
-                                possibleMatches.add(originalFile);
+                                possibleMatches.add(originalFileRef);
                             }
                         }
                         if (possibleMatches.size() == 1) {
@@ -1605,30 +1638,30 @@ public class ProjectFrame extends JFrame {
     }
 
     // Helper to gather all files in project directories
-    private ArrayList<File> getAllFilesInProjectDirectories() {
+    private ArrayList<FileReference> getAllFilesInProjectDirectories() {
         HashSet<File> dirs = new HashSet<>();
         for (Conversion c : project.getConversions()) {
-            for (File f : c.linkedFiles) {
+            for (FileReference f : c.linkedFiles) {
                 if (f.getParentFile() != null) {
                     dirs.add(f.getParentFile());
                 }
             }
         }
-        ArrayList<File> allFiles = new ArrayList<>();
+        ArrayList<FileReference> allFiles = new ArrayList<>();
         for (File dir : dirs) {
             gatherFilesRecursive(dir, allFiles);
         }
         return allFiles;
     }
 
-    private void gatherFilesRecursive(File dir, ArrayList<File> allFiles) {
+    private void gatherFilesRecursive(File dir, ArrayList<FileReference> allFiles) {
         File[] files = dir.listFiles();
         if (files != null) {
             for (File f : files) {
                 if (f.isDirectory()) {
                     gatherFilesRecursive(f, allFiles);
                 } else {
-                    allFiles.add(f);
+                    allFiles.add(new FileReference(f));
                 }
             }
         }
@@ -1636,8 +1669,8 @@ public class ProjectFrame extends JFrame {
 
     // Add these helper methods at the class level
     private void updateLinkedFilesAfterRename(Conversion c, String baseName) {
-        ArrayList<File> updated = new ArrayList<>();
-        for (File oldFile : c.linkedFiles) {
+        ArrayList<FileReference> updated = new ArrayList<>();
+        for (FileReference oldFile : c.linkedFiles) {
             File dir = oldFile.getParentFile();
             if (dir != null && dir.exists()) {
                 File[] files = dir.listFiles();
@@ -1646,7 +1679,7 @@ public class ProjectFrame extends JFrame {
                         String norm = normalizeFilename(f.getName());
                         String baseNorm = normalizeFilename(baseName);
                         if (norm.contains(baseNorm) && f.getName().endsWith(getExtension(oldFile))) {
-                            updated.add(f);
+                            updated.add(new FileReference(f));
                             break;
                         }
                     }
@@ -1659,7 +1692,7 @@ public class ProjectFrame extends JFrame {
         }
     }
 
-    private String getExtension(File file) {
+    private String getExtension(FileReference file) {
         String name = file.getName();
         int dot = name.lastIndexOf('.');
         return (dot != -1) ? name.substring(dot) : "";
@@ -1704,5 +1737,213 @@ public class ProjectFrame extends JFrame {
         rowPanel.add(labelComponent, BorderLayout.WEST);
         rowPanel.add(valueComponent, BorderLayout.EAST);
         panel.add(rowPanel, gbc);
+    }
+    
+    private void showWriteToDestinationDialog() {
+        // Create destination selection dialog
+        JFileChooser destinationChooser = new JFileChooser();
+        destinationChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        destinationChooser.setDialogTitle("Select Destination Folder for Client Delivery");
+        
+        // Set the current directory to the last used directory
+        String lastDir = Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir != null && new File(lastDir).exists()) {
+            destinationChooser.setCurrentDirectory(new File(lastDir));
+        }
+        
+        int result = destinationChooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        
+        File destinationFolder = destinationChooser.getSelectedFile();
+        
+        // Create options dialog
+        JPanel optionsPanel = new JPanel();
+        optionsPanel.setLayout(new BoxLayout(optionsPanel, BoxLayout.Y_AXIS));
+        optionsPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        // Folder structure options
+        JCheckBox createConversionFolders = new JCheckBox("Create separate folder for each conversion", true);
+        createConversionFolders.setToolTipText("Each conversion will get its own folder named after the conversion note");
+        
+        JCheckBox renameFiles = new JCheckBox("Rename files to conversion names", false);
+        renameFiles.setToolTipText("Rename files to match their conversion names (ignored for data-only conversions)");
+        
+        JCheckBox includeSubdirectories = new JCheckBox("Include files in subdirectories", false);
+        includeSubdirectories.setToolTipText("Also copy files found in subdirectories of linked files");
+        
+        JCheckBox preserveOriginalNames = new JCheckBox("Preserve original filenames for data-only conversions", true);
+        preserveOriginalNames.setToolTipText("Data-only conversions will keep original filenames (recommended)");
+        
+        optionsPanel.add(new JLabel("Export Options:"));
+        optionsPanel.add(Box.createVerticalStrut(10));
+        optionsPanel.add(createConversionFolders);
+        optionsPanel.add(Box.createVerticalStrut(5));
+        optionsPanel.add(renameFiles);
+        optionsPanel.add(Box.createVerticalStrut(5));
+        optionsPanel.add(includeSubdirectories);
+        optionsPanel.add(Box.createVerticalStrut(5));
+        optionsPanel.add(preserveOriginalNames);
+        
+        int optionsResult = JOptionPane.showConfirmDialog(this,
+            optionsPanel,
+            "Export Options",
+            JOptionPane.OK_CANCEL_OPTION,
+            JOptionPane.QUESTION_MESSAGE);
+            
+        if (optionsResult != JOptionPane.OK_OPTION) {
+            return;
+        }
+        
+        // Generate preview
+        StringBuilder preview = new StringBuilder();
+        preview.append("Destination: ").append(destinationFolder.getAbsolutePath()).append("\n");
+        preview.append("Project Folder: ").append(project.getName()).append("\n\n");
+        
+        int totalFiles = 0;
+        for (Conversion c : project.getConversions()) {
+            if (c.linkedFiles.isEmpty()) continue;
+            
+            String folderName = createConversionFolders.isSelected() ? 
+                (c.note.isEmpty() ? c.name : c.note) : "";
+            
+            preview.append("Conversion: ").append(c.name);
+            if (!folderName.isEmpty()) {
+                preview.append(" → Folder: ").append(project.getName()).append("/").append(folderName);
+            } else {
+                preview.append(" → Folder: ").append(project.getName());
+            }
+            preview.append("\n");
+            
+            if (c.isDataOnly) {
+                preview.append("  (Data-only: preserving original filenames)\n");
+                for (FileReference fileRef : c.linkedFiles) {
+                    preview.append("    ").append(fileRef.getName()).append("\n");
+                    totalFiles++;
+                }
+            } else {
+                for (FileReference fileRef : c.linkedFiles) {
+                    String newName = renameFiles.isSelected() ? 
+                        (c.note.isEmpty() ? c.name : c.note) : fileRef.getName();
+                    preview.append("    ").append(fileRef.getName()).append(" → ").append(newName).append("\n");
+                    totalFiles++;
+                }
+            }
+            preview.append("\n");
+        }
+        
+        preview.append("Total files to copy: ").append(totalFiles);
+        
+        // Show preview and confirm
+        int confirmResult = JOptionPane.showConfirmDialog(this,
+            preview.toString(),
+            "Preview Export",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.INFORMATION_MESSAGE);
+            
+        if (confirmResult != JOptionPane.YES_OPTION) {
+            return;
+        }
+        
+        // Execute the export
+        executeExport(destinationFolder, createConversionFolders.isSelected(), 
+                     renameFiles.isSelected(), includeSubdirectories.isSelected(), 
+                     preserveOriginalNames.isSelected());
+    }
+    
+    private void executeExport(File destinationFolder, boolean createFolders, boolean renameFiles, 
+                              boolean includeSubdirs, boolean preserveDataNames) {
+        int totalCopied = 0;
+        int totalErrors = 0;
+        
+        // Create project folder
+        String projectFolderName = project.getName().replaceAll("[<>:\"/\\|?*]", "_");
+        File projectFolder = new File(destinationFolder, projectFolderName);
+        if (!projectFolder.exists()) {
+            projectFolder.mkdirs();
+        }
+        
+        logFileOperation("START EXPORT", "Exporting to: " + projectFolder.getAbsolutePath());
+        
+        for (Conversion c : project.getConversions()) {
+            if (c.linkedFiles.isEmpty()) continue;
+            
+            // Create conversion folder if requested
+            File conversionFolder = projectFolder;
+            if (createFolders) {
+                String folderName = c.note.isEmpty() ? c.name : c.note;
+                // Sanitize folder name
+                folderName = folderName.replaceAll("[<>:\"/\\|?*]", "_");
+                conversionFolder = new File(projectFolder, folderName);
+                if (!conversionFolder.exists()) {
+                    conversionFolder.mkdirs();
+                }
+            }
+            
+            for (FileReference fileRef : c.linkedFiles) {
+                try {
+                    File sourceFile = fileRef.getFile();
+                    if (!sourceFile.exists()) {
+                        logFileOperation("ERROR", "Source file not found: " + sourceFile.getAbsolutePath());
+                        totalErrors++;
+                        continue;
+                    }
+                    
+                    // Determine destination filename
+                    String destFileName;
+                    if (c.isDataOnly && preserveDataNames) {
+                        // For data-only conversions, preserve original names
+                        destFileName = sourceFile.getName();
+                    } else if (renameFiles && !c.note.isEmpty()) {
+                        // Rename to conversion note
+                        String extension = "";
+                        int dot = sourceFile.getName().lastIndexOf('.');
+                        if (dot > 0) {
+                            extension = sourceFile.getName().substring(dot);
+                        }
+                        destFileName = c.note + extension;
+                    } else {
+                        // Keep original name
+                        destFileName = sourceFile.getName();
+                    }
+                    
+                    File destFile = new File(conversionFolder, destFileName);
+                    
+                    // Handle duplicate filenames
+                    int counter = 1;
+                    while (destFile.exists()) {
+                        String baseName = destFileName;
+                        String extension = "";
+                        int dot = destFileName.lastIndexOf('.');
+                        if (dot > 0) {
+                            baseName = destFileName.substring(0, dot);
+                            extension = destFileName.substring(dot);
+                        }
+                        destFileName = baseName + " (" + counter + ")" + extension;
+                        destFile = new File(conversionFolder, destFileName);
+                        counter++;
+                    }
+                    
+                    // Copy the file
+                    java.nio.file.Files.copy(sourceFile.toPath(), destFile.toPath(), 
+                                           java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    
+                    logFileOperation("COPY", sourceFile.getAbsolutePath() + " → " + destFile.getAbsolutePath());
+                    totalCopied++;
+                    
+                } catch (Exception e) {
+                    logFileOperation("ERROR", "Failed to copy " + fileRef.getPath() + ": " + e.getMessage());
+                    totalErrors++;
+                }
+            }
+        }
+        
+        logFileOperation("END EXPORT", "Copied " + totalCopied + " files, " + totalErrors + " errors");
+        
+        // Show completion message
+        String message = String.format("Export completed!\n\nCopied: %d files\nErrors: %d\n\nFiles exported to: %s", 
+                                      totalCopied, totalErrors, projectFolder.getAbsolutePath());
+        JOptionPane.showMessageDialog(this, message, "Export Complete", JOptionPane.INFORMATION_MESSAGE);
     }
 }

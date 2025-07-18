@@ -9,6 +9,7 @@ public enum Type {
     MINIDV("MiniDV"),
     CD_DVD("CD/DVD"),
     TYPE_II("Type II"),
+    MISC_DATA_STORAGE("Misc Data Storage"),
     ;
 
     private final String displayName;

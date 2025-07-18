@@ -12,6 +12,7 @@ import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.tree.DefaultMutableTreeNode;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -20,24 +21,30 @@ import java.awt.datatransfer.StringSelection;
 import java.awt.Desktop;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNullElse;
+import com.thevideogoat.digitizingassistant.data.FileReference;
+import com.thevideogoat.digitizingassistant.util.FileCacheManager;
 
 public class ConversionPanel extends JPanel {
 
     ProjectFrame projectFrame;
     Conversion conversion;
 
-    JPanel typeRow, noteRow, filesPanel, filenamePanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
-    JLabel header, type, note;
-    JList<File> filesList;
+    JPanel typeRow, noteRow, dataOnlyRow, technicianNotesRow, filesPanel, filenamePanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
+    JLabel header, type, note, technicianNotes;
+    JList<FileReference> filesList;
     JComboBox<Type> typeSelector;
     JComboBox<ConversionStatus> statusSelector;
     JComboBox<String> amPmSelector;
-    JTextField noteField;
+    JTextField noteField, technicianNotesField;
+    JCheckBox dataOnlyCheckbox;
     JSpinner mmSpinner, ddSpinner, yyyySpinner, hhSpinner, minSpinner, tapeDurationSpinner;
 
     JButton addFileBtn, saveBtn;
@@ -104,18 +111,57 @@ public class ConversionPanel extends JPanel {
         noteRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
         noteRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
         noteRow.setBackground(Theme.BACKGROUND);
-        note = new JLabel("Conversion Notes");
+        note = new JLabel("Conversion Note");
         note.setForeground(Color.WHITE);
         note.setFont(Theme.NORMAL_FONT);
         
         noteField = new JTextField(conversion.note);
         noteField.setPreferredSize(new Dimension(400, 30));
         Theme.styleTextField(noteField);
-        noteField.setFont(Theme.NORMAL_FONT.deriveFont(18f));
+        noteField.setFont(Theme.NORMAL_FONT.deriveFont(14f));
         
         noteRow.add(note);
         noteRow.add(Box.createHorizontalStrut(10));
         noteRow.add(noteField);
+
+        // data-only checkbox
+        dataOnlyRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        dataOnlyRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
+        dataOnlyRow.setBackground(Theme.BACKGROUND);
+        
+        dataOnlyCheckbox = new JCheckBox("Mark As Data-Only");
+        dataOnlyCheckbox.setSelected(conversion.isDataOnly);
+        dataOnlyCheckbox.setForeground(Color.WHITE);
+        dataOnlyCheckbox.setFont(Theme.NORMAL_FONT);
+        dataOnlyCheckbox.setOpaque(false);
+        dataOnlyCheckbox.addActionListener(e -> {
+            conversion.isDataOnly = dataOnlyCheckbox.isSelected();
+            projectFrame.markUnsavedChanges();
+        });
+        
+        dataOnlyRow.add(dataOnlyCheckbox);
+
+        // technician notes
+        technicianNotesRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        technicianNotesRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 60));
+        technicianNotesRow.setBackground(Theme.BACKGROUND);
+        technicianNotes = new JLabel("Technician Notes");
+        technicianNotes.setForeground(Color.WHITE);
+        technicianNotes.setFont(Theme.NORMAL_FONT);
+        
+        technicianNotesField = new JTextField(conversion.technicianNotes);
+        technicianNotesField.setPreferredSize(new Dimension(400, 30));
+        Theme.styleTextField(technicianNotesField);
+        technicianNotesField.setFont(Theme.NORMAL_FONT.deriveFont(14f));
+        technicianNotesField.getDocument().addDocumentListener(new DocumentListener() {
+            public void changedUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+            public void removeUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+            public void insertUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
+        });
+        
+        technicianNotesRow.add(technicianNotes);
+        technicianNotesRow.add(Box.createHorizontalStrut(10));
+        technicianNotesRow.add(technicianNotesField);
 
         // linked files
         filesPanel = new JPanel();
@@ -142,11 +188,12 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem openFile = new JMenuItem("Open File");
         openFile.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
-                if (!selectedFile.exists()) {
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
+                File selectedFile = selectedFileRef.getFile();
+                if (!selectedFileRef.exists()) {
                     int choice = JOptionPane.showConfirmDialog(this,
-                        "File not found: " + selectedFile.getAbsolutePath() + "\n\nWould you like to relink this file?",
+                        "File not found: " + selectedFileRef.getPath() + "\n\nWould you like to relink this file?",
                         "File Not Found",
                         JOptionPane.YES_NO_OPTION,
                         JOptionPane.ERROR_MESSAGE);
@@ -154,7 +201,7 @@ public class ConversionPanel extends JPanel {
                     if (choice == JOptionPane.YES_OPTION) {
                         JFileChooser fileChooser = new JFileChooser();
                         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                        fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                        fileChooser.setDialogTitle("Select new location for " + selectedFileRef.getName());
                         
                         // Set the current directory to the last used directory
                         String lastDir = Preferences.getInstance().getLastUsedDirectory();
@@ -164,12 +211,12 @@ public class ConversionPanel extends JPanel {
                         
                         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File newLocation = fileChooser.getSelectedFile();
-                            File newFile = new File(newLocation, selectedFile.getName());
+                            File newFile = new File(newLocation, selectedFileRef.getName());
                             
                             if (newFile.exists()) {
-                                int index = conversion.linkedFiles.indexOf(selectedFile);
+                                int index = conversion.linkedFiles.indexOf(selectedFileRef);
                                 if (index != -1) {
-                                    conversion.linkedFiles.set(index, newFile);
+                                    conversion.linkedFiles.set(index, new FileReference(newFile));
                                     updateLinkedFiles();
                                     projectFrame.markUnsavedChanges();
                                     JOptionPane.showMessageDialog(this,
@@ -210,11 +257,11 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem showInExplorer = new JMenuItem("Show in Explorer");
         showInExplorer.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
-                if (!selectedFile.exists()) {
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
+                if (!selectedFileRef.exists()) {
                     int choice = JOptionPane.showConfirmDialog(this,
-                        "File not found: " + selectedFile.getAbsolutePath() + "\n\nWould you like to relink this file?",
+                        "File not found: " + selectedFileRef.getPath() + "\n\nWould you like to relink this file?",
                         "File Not Found",
                         JOptionPane.YES_NO_OPTION,
                         JOptionPane.ERROR_MESSAGE);
@@ -222,7 +269,7 @@ public class ConversionPanel extends JPanel {
                     if (choice == JOptionPane.YES_OPTION) {
                         JFileChooser fileChooser = new JFileChooser();
                         fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                        fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                        fileChooser.setDialogTitle("Select new location for " + selectedFileRef.getName());
                         
                         // Set the current directory to the last used directory
                         String lastDir = Preferences.getInstance().getLastUsedDirectory();
@@ -232,12 +279,12 @@ public class ConversionPanel extends JPanel {
                         
                         if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                             File newLocation = fileChooser.getSelectedFile();
-                            File newFile = new File(newLocation, selectedFile.getName());
+                            File newFile = new File(newLocation, selectedFileRef.getName());
                             
                             if (newFile.exists()) {
-                                int index = conversion.linkedFiles.indexOf(selectedFile);
+                                int index = conversion.linkedFiles.indexOf(selectedFileRef);
                                 if (index != -1) {
-                                    conversion.linkedFiles.set(index, newFile);
+                                    conversion.linkedFiles.set(index, new FileReference(newFile));
                                     updateLinkedFiles();
                                     projectFrame.markUnsavedChanges();
                                     JOptionPane.showMessageDialog(this,
@@ -265,7 +312,7 @@ public class ConversionPanel extends JPanel {
                     }
                 } else {
                     try {
-                        Desktop.getDesktop().open(selectedFile.getParentFile());
+                        Desktop.getDesktop().open(selectedFileRef.getParentFile());
                     } catch (IOException ex) {
                         JOptionPane.showMessageDialog(this,
                             "Could not open file location: " + ex.getMessage(),
@@ -278,9 +325,9 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem copyPath = new JMenuItem("Copy Path");
         copyPath.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
-                StringSelection stringSelection = new StringSelection(selectedFile.getAbsolutePath());
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
+                StringSelection stringSelection = new StringSelection(selectedFileRef.getPath());
                 Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
                 clipboard.setContents(stringSelection, null);
             }
@@ -288,22 +335,23 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem renameFile = new JMenuItem("Rename File");
         renameFile.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
                 String newName = JOptionPane.showInputDialog(this,
                     "Enter new name:",
                     "Rename File",
                     JOptionPane.PLAIN_MESSAGE,
                     null,
                     null,
-                    selectedFile.getName()).toString();
+                    selectedFileRef.getName()).toString();
                 
                 if (newName != null && !newName.trim().isEmpty()) {
+                    File selectedFile = selectedFileRef.getFile();
                     File newFile = new File(selectedFile.getParentFile(), newName);
                     if (selectedFile.renameTo(newFile)) {
-                        int index = conversion.linkedFiles.indexOf(selectedFile);
+                        int index = conversion.linkedFiles.indexOf(selectedFileRef);
                         if (index != -1) {
-                            conversion.linkedFiles.set(index, newFile);
+                            conversion.linkedFiles.set(index, new FileReference(newFile));
                             updateLinkedFiles();
                             projectFrame.markUnsavedChanges();
                         }
@@ -319,11 +367,11 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem relinkMedia = new JMenuItem("Relink Media");
         relinkMedia.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
                 JFileChooser fileChooser = new JFileChooser();
                 fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                fileChooser.setDialogTitle("Select new location for " + selectedFile.getName());
+                fileChooser.setDialogTitle("Select new location for " + selectedFileRef.getName());
                 
                 // Set the current directory to the last used directory
                 String lastDir = Preferences.getInstance().getLastUsedDirectory();
@@ -333,12 +381,12 @@ public class ConversionPanel extends JPanel {
                 
                 if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
                     File newLocation = fileChooser.getSelectedFile();
-                    File newFile = new File(newLocation, selectedFile.getName());
+                    File newFile = new File(newLocation, selectedFileRef.getName());
                     
                     if (newFile.exists()) {
-                        int index = conversion.linkedFiles.indexOf(selectedFile);
+                        int index = conversion.linkedFiles.indexOf(selectedFileRef);
                         if (index != -1) {
-                            conversion.linkedFiles.set(index, newFile);
+                            conversion.linkedFiles.set(index, new FileReference(newFile));
                             updateLinkedFiles();
                             projectFrame.markUnsavedChanges();
                             JOptionPane.showMessageDialog(this,
@@ -358,9 +406,9 @@ public class ConversionPanel extends JPanel {
         
         JMenuItem removeFile = new JMenuItem("Remove File");
         removeFile.addActionListener(e -> {
-            File selectedFile = filesList.getSelectedValue();
-            if (selectedFile != null) {
-                conversion.linkedFiles.remove(selectedFile);
+            FileReference selectedFileRef = filesList.getSelectedValue();
+            if (selectedFileRef != null) {
+                conversion.linkedFiles.remove(selectedFileRef);
                 updateLinkedFiles();
                 projectFrame.markUnsavedChanges();
             }
@@ -390,13 +438,13 @@ public class ConversionPanel extends JPanel {
         Theme.styleScrollPane(scrollPane);
         scrollPane.setPreferredSize(new Dimension(400, 150));
         
-        DefaultListModel<File> listModel = new DefaultListModel<>();
+        DefaultListModel<FileReference> listModel = new DefaultListModel<>();
         if(conversion.linkedFiles != null) {
-            for (File f : conversion.linkedFiles) {
-                listModel.addElement(f);
+            for (FileReference fileRef : conversion.linkedFiles) {
+                listModel.addElement(fileRef);
             }
         } else {
-            listModel.addElement(new File("No files attached"));
+            listModel.addElement(new FileReference("No files attached"));
         }
         filesList.setModel(listModel);
 
@@ -488,8 +536,14 @@ public class ConversionPanel extends JPanel {
                 JOptionPane.QUESTION_MESSAGE);
             
             if (confirm == JOptionPane.YES_OPTION) {
+                // Convert FileReferences to Files for the rename operation
+                ArrayList<File> filesToRename = new ArrayList<>();
+                for (FileReference fileRef : conversion.linkedFiles) {
+                    filesToRename.add(fileRef.getFile());
+                }
+                
                 Util.renameFilesWithOptions(
-                    conversion.linkedFiles, 
+                    filesToRename, 
                     newName,
                     includeSubdirs.isSelected(),
                     preserveNumbering.isSelected()
@@ -501,7 +555,14 @@ public class ConversionPanel extends JPanel {
         addFileBtn = new JButton("Attach File");
         Theme.styleButton(addFileBtn);
 
+        // Show File Map button
+        JButton showFileMapBtn = new JButton("Show File Map");
+        Theme.styleButton(showFileMapBtn);
+        showFileMapBtn.addActionListener(e -> showFileMapDialog());
+
         filesButtonRow.add(renameOptionsBtn);
+        filesButtonRow.add(Box.createHorizontalStrut(10));
+        filesButtonRow.add(showFileMapBtn);
         filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(addFileBtn);
 
@@ -686,8 +747,12 @@ public class ConversionPanel extends JPanel {
         add(headerRow);
         add(Box.createVerticalStrut(15));
         add(typeRow);
-        add(Box.createVerticalStrut(15));
+        add(Box.createVerticalStrut(1));
         add(noteRow);
+        add(Box.createVerticalStrut(1));
+        add(technicianNotesRow);
+        add(Box.createVerticalStrut(1));
+        add(dataOnlyRow);
         add(Box.createVerticalStrut(15));
         add(filesPanel);
         add(Box.createVerticalStrut(15));
@@ -718,8 +783,9 @@ public class ConversionPanel extends JPanel {
             if (result == JFileChooser.APPROVE_OPTION) {
                 File[] selectedFiles = fileChooser.getSelectedFiles();
                 for (File file : selectedFiles) {
-                    if (!conversion.linkedFiles.contains(file)) {
-                        conversion.linkedFiles.add(file);
+                    FileReference fileRef = new FileReference(file);
+                    if (!conversion.linkedFiles.contains(fileRef)) {
+                        conversion.linkedFiles.add(fileRef);
                     }
                 }
                 
@@ -763,10 +829,6 @@ public class ConversionPanel extends JPanel {
         saveBtn.addActionListener(e -> {
             updateConversion();
             projectFrame.saveProject();
-            JOptionPane.showMessageDialog(this, 
-                "Changes saved successfully.", 
-                "Save Success", 
-                JOptionPane.INFORMATION_MESSAGE);
         });
 
         // Delete button
@@ -819,13 +881,13 @@ public class ConversionPanel extends JPanel {
     }
 
     private void updateLinkedFiles(){
-        DefaultListModel<File> listModel = new DefaultListModel<>();
+        DefaultListModel<FileReference> listModel = new DefaultListModel<>();
         if(conversion.linkedFiles != null) {
-            for (File f : conversion.linkedFiles) {
-                listModel.addElement(f);
+            for (FileReference fileRef : conversion.linkedFiles) {
+                listModel.addElement(fileRef);
             }
         } else {
-            listModel.addElement(new File("No files attached"));
+            listModel.addElement(new FileReference("No files attached"));
         }
         filesList.setModel(listModel);
     }
@@ -916,6 +978,8 @@ public class ConversionPanel extends JPanel {
         // Update conversion properties
         conversion.type = (Type) typeSelector.getSelectedItem();
         conversion.note = noteField.getText();
+        conversion.technicianNotes = technicianNotesField.getText();
+        conversion.isDataOnly = dataOnlyCheckbox.isSelected();
         conversion.status = (ConversionStatus) statusSelector.getSelectedItem();
         
         // Update date - format numbers to ensure two digits
@@ -932,6 +996,210 @@ public class ConversionPanel extends JPanel {
         if (tapeDurationRow.isVisible()) {
             int minutes = (Integer) tapeDurationSpinner.getValue();
             conversion.duration = Duration.ofMinutes(minutes);
+        }
+    }
+
+    private void showFileMapDialog() {
+        if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "No files are linked to this conversion.",
+                "No Files",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Create the file map dialog
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "File Map - " + conversion.name, true);
+        dialog.setSize(800, 600);
+        dialog.setLocationRelativeTo(this);
+        dialog.setLayout(new BorderLayout());
+
+        // Create tree model for file structure with conversion as root
+        DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode(conversion.name);
+        
+        // Add linked files directly as children of the conversion
+        for (FileReference fileRef : conversion.linkedFiles) {
+            File file = fileRef.getFile();
+            if (file.exists()) {
+                // Add the linked file directly as a child of the conversion
+                DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(fileRef.getName());
+                fileNode.setUserObject(new FileData(fileRef.getName(), file.getAbsolutePath(), getFileSize(file)));
+                rootNode.add(fileNode);
+                
+                // If it's a directory, explore its contents
+                if (file.isDirectory()) {
+                    exploreDirectory(file, fileNode);
+                }
+            } else {
+                // Show missing files
+                DefaultMutableTreeNode missingNode = new DefaultMutableTreeNode(fileRef.getName() + " (Missing)");
+                missingNode.setUserObject(new FileData(fileRef.getName(), fileRef.getPath(), "File not found"));
+                rootNode.add(missingNode);
+            }
+        }
+
+        JTree fileTree = new JTree(rootNode);
+        fileTree.setRootVisible(true);
+        fileTree.expandRow(0); // Expand root node
+        
+        // Style the tree with light mode
+        fileTree.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        fileTree.setBackground(Color.WHITE);
+        fileTree.setForeground(Color.BLACK);
+        fileTree.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        
+        // Create context menu
+        JPopupMenu contextMenu = new JPopupMenu();
+        JMenuItem openFileItem = new JMenuItem("Open File");
+        JMenuItem openLocationItem = new JMenuItem("Open File Location");
+        JMenuItem viewPropertiesItem = new JMenuItem("View Properties");
+        
+        contextMenu.add(openFileItem);
+        contextMenu.add(openLocationItem);
+        contextMenu.add(viewPropertiesItem);
+        
+        // Add context menu listeners
+        openFileItem.addActionListener(e -> {
+            FileData fileData = getSelectedFileData(fileTree);
+            if (fileData != null && !fileData.getPath().contains("(Missing)")) {
+                try {
+                    Desktop.getDesktop().open(new File(fileData.getPath()));
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(dialog, "Unable to open file: " + ex.getMessage(),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        
+        openLocationItem.addActionListener(e -> {
+            FileData fileData = getSelectedFileData(fileTree);
+            if (fileData != null && !fileData.getPath().contains("(Missing)")) {
+                try {
+                    Desktop.getDesktop().open(new File(fileData.getPath()).getParentFile());
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(dialog, "Unable to open file location: " + ex.getMessage(),
+                            "Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+        
+        viewPropertiesItem.addActionListener(e -> {
+            FileData fileData = getSelectedFileData(fileTree);
+            if (fileData != null) {
+                String message = "File: " + fileData.getName() + "\nPath: " + fileData.getPath() + "\nSize: " + fileData.getSize();
+                JOptionPane.showMessageDialog(dialog, message, "File Properties", JOptionPane.INFORMATION_MESSAGE);
+            }
+        });
+        
+        // Add mouse listener for context menu
+        fileTree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isRightMouseButton(e)) {
+                    int row = fileTree.getClosestRowForLocation(e.getX(), e.getY());
+                    fileTree.setSelectionRow(row);
+                    contextMenu.show(e.getComponent(), e.getX(), e.getY());
+                }
+            }
+        });
+        
+        JScrollPane scrollPane = new JScrollPane(fileTree);
+        scrollPane.setBackground(Color.WHITE);
+        scrollPane.setBorder(BorderFactory.createLineBorder(Color.LIGHT_GRAY));
+        
+        // Add close button
+        JButton closeButton = new JButton("Close");
+        closeButton.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        closeButton.setBackground(new Color(240, 240, 240));
+        closeButton.setForeground(Color.BLACK);
+        closeButton.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.GRAY),
+            BorderFactory.createEmptyBorder(5, 15, 5, 15)
+        ));
+        closeButton.addActionListener(e -> dialog.dispose());
+        
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        buttonPanel.setBackground(Color.WHITE);
+        buttonPanel.add(closeButton);
+        
+        dialog.add(scrollPane, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        dialog.setVisible(true);
+    }
+    
+    private String getFileSize(File file) {
+        try {
+            if (file.isDirectory()) {
+                return "Directory";
+            } else {
+                long size = Files.size(file.toPath());
+                if (size < 1024) {
+                    return size + " bytes";
+                } else if (size < 1024 * 1024) {
+                    return String.format("%.1f KB", size / 1024.0);
+                } else if (size < 1024 * 1024 * 1024) {
+                    return String.format("%.1f MB", size / (1024.0 * 1024.0));
+                } else {
+                    return String.format("%.1f GB", size / (1024.0 * 1024.0 * 1024.0));
+                }
+            }
+        } catch (IOException e) {
+            return "Size unknown";
+        }
+    }
+    
+    private void exploreDirectory(File directory, DefaultMutableTreeNode parentNode) {
+        try {
+            File[] contents = directory.listFiles();
+            if (contents != null) {
+                for (File item : contents) {
+                    DefaultMutableTreeNode childNode = new DefaultMutableTreeNode(item.getName());
+                    childNode.setUserObject(new FileData(item.getName(), item.getAbsolutePath(), getFileSize(item)));
+                    parentNode.add(childNode);
+                    
+                    // Recursively explore subdirectories (but limit depth to avoid performance issues)
+                    if (item.isDirectory() && parentNode.getLevel() < 3) { // Limit to 3 levels deep
+                        exploreDirectory(item, childNode);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Add error node if we can't read directory
+            DefaultMutableTreeNode errorNode = new DefaultMutableTreeNode("Error reading directory");
+            parentNode.add(errorNode);
+        }
+    }
+    
+
+    
+    private FileData getSelectedFileData(JTree tree) {
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
+        if (selectedNode != null && selectedNode.getUserObject() instanceof FileData) {
+            return (FileData) selectedNode.getUserObject();
+        }
+        return null;
+    }
+    
+    // Helper class for file data
+    private static class FileData {
+        private final String name;
+        private final String path;
+        private final String size;
+        
+        public FileData(String name, String path, String size) {
+            this.name = name;
+            this.path = path;
+            this.size = size;
+        }
+        
+        public String getName() { return name; }
+        public String getPath() { return path; }
+        public String getSize() { return size; }
+        
+        @Override
+        public String toString() {
+            return name;
         }
     }
 

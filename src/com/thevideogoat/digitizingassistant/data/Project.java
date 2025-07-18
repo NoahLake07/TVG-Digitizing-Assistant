@@ -74,6 +74,20 @@ public class Project implements Serializable {
                 }
                 
                 conversion.note = conversionJson.get("note").getAsString();
+                
+                // Handle new fields for version 1.5
+                if (conversionJson.has("technicianNotes")) {
+                    conversion.technicianNotes = conversionJson.get("technicianNotes").getAsString();
+                } else {
+                    conversion.technicianNotes = "";
+                }
+                
+                if (conversionJson.has("isDataOnly")) {
+                    conversion.isDataOnly = conversionJson.get("isDataOnly").getAsBoolean();
+                } else {
+                    conversion.isDataOnly = false;
+                }
+                
                 conversion.duration = Duration.parse(conversionJson.get("duration").getAsString());
                 
                 // Handle linked files
@@ -82,9 +96,9 @@ public class Project implements Serializable {
                     conversion.linkedFiles = new ArrayList<>();
                     for (JsonElement fileElement : linkedFilesArray) {
                         String filePath = fileElement.getAsString();
-                        File file = new File(filePath);
-                        if (file.exists()) {
-                            conversion.linkedFiles.add(file);
+                        FileReference fileRef = new FileReference(filePath);
+                        if (fileRef.exists()) {
+                            conversion.linkedFiles.add(fileRef);
                         }
                     }
                 }
@@ -117,13 +131,15 @@ public class Project implements Serializable {
                 conversionJson.addProperty("type", conversion.type.toString());
                 conversionJson.addProperty("status", conversion.status.toString());
                 conversionJson.addProperty("note", conversion.note);
+                conversionJson.addProperty("technicianNotes", conversion.technicianNotes);
+                conversionJson.addProperty("isDataOnly", conversion.isDataOnly);
                 conversionJson.addProperty("duration", conversion.duration.toString());
                 
                 // Add linked files
                 JsonArray linkedFilesArray = new JsonArray();
                 if (conversion.linkedFiles != null) {
-                    for (File file : conversion.linkedFiles) {
-                        linkedFilesArray.add(file.getAbsolutePath());
+                    for (FileReference fileRef : conversion.linkedFiles) {
+                        linkedFilesArray.add(fileRef.getPath());
                     }
                 }
                 conversionJson.add("linkedFiles", linkedFilesArray);
@@ -147,6 +163,10 @@ public class Project implements Serializable {
 
     public ArrayList<Conversion> getConversions(){
         return this.conversions;
+    }
+    
+    public void setConversions(ArrayList<Conversion> conversions){
+        this.conversions = conversions;
     }
 
 }
