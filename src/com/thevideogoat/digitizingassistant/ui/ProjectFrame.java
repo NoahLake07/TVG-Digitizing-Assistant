@@ -45,6 +45,7 @@ public class ProjectFrame extends JFrame {
     private JLabel saveStatusLabel;
     private Timer saveStatusTimer;
     private boolean hasUnsavedChanges = false;
+    private JComboBox<String> sortByDropdown;
 
     public ProjectFrame(Project project) {
         super();
@@ -578,18 +579,18 @@ public class ProjectFrame extends JFrame {
         sidebar.add(Box.createVerticalStrut(10));
 
         // Add sort dropdown with simple styling
-        JComboBox<String> sortBy = new JComboBox<>(new String[]{"Name", "Natural Sort", "Status", "Type"});
-        sortBy.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
-        sortBy.setFont(Theme.NORMAL_FONT);
-        sortBy.setForeground(Color.BLACK);
-        sortBy.setSelectedItem("Natural Sort"); // Set Natural Sort as default
-        sortBy.setToolTipText("Sort conversions by different criteria");
+        sortByDropdown = new JComboBox<>(new String[]{"Name", "Natural Sort", "Status", "Type"});
+        sortByDropdown.setMaximumSize(new Dimension(Integer.MAX_VALUE, 35));
+        sortByDropdown.setFont(Theme.NORMAL_FONT);
+        sortByDropdown.setForeground(Color.BLACK);
+        sortByDropdown.setSelectedItem("Natural Sort"); // Set Natural Sort as default
+        sortByDropdown.setToolTipText("Sort conversions by different criteria");
         
-        sortBy.addActionListener(e -> {
+        sortByDropdown.addActionListener(e -> {
             conversionListPanel.removeAll();
             ArrayList<Conversion> sortedConversions = Util.sortConversionsBy(
                 project.getConversions(), 
-                sortBy.getSelectedItem().toString()
+                sortByDropdown.getSelectedItem().toString()
             );
             for (Conversion c : sortedConversions) {
                 addConversionToSidebar(c);
@@ -597,7 +598,7 @@ public class ProjectFrame extends JFrame {
             conversionListPanel.revalidate();
             conversionListPanel.repaint();
         });
-        sidebar.add(sortBy);
+        sidebar.add(sortByDropdown);
         sidebar.add(Box.createVerticalStrut(10));
 
         // Add New Conversion button
@@ -952,8 +953,9 @@ public class ProjectFrame extends JFrame {
 
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
         
-        // Auto-sort conversions after saving
-        project.setConversions(Util.sortConversionsBy(project.getConversions(), "name"));
+        // Auto-sort conversions after saving using current dropdown selection
+        String currentSortBy = sortByDropdown.getSelectedItem().toString();
+        project.setConversions(Util.sortConversionsBy(project.getConversions(), currentSortBy));
         refreshConversionList();
         
         updateButtonColors();
