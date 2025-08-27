@@ -5,12 +5,12 @@ import java.io.Serializable;
 public enum ConversionStatus implements Serializable {
 
     NOT_STARTED("Not Started"),
-    DAMAGED("Damaged"),
-    DAMAGE_FIXED("Damage Fixed"),
-    DAMAGE_IRREVERSIBLE("Damage Irreversible"),
     IN_PROGRESS("In Progress"),
     BASIC_EDITING("Basic Editing"),
     COMPLETED("Completed"),
+    DAMAGED("Damaged"),
+    DAMAGE_FIXED("Damage Fixed"),
+    DAMAGE_IRREVERSIBLE("Damage Irreversible"),
     ;
 
     final String name;

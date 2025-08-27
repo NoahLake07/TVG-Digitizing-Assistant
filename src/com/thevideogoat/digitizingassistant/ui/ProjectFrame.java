@@ -1345,6 +1345,8 @@ public class ProjectFrame extends JFrame {
 
             JComboBox<ExportUtil.ExportType> typeCombo = new JComboBox<>(ExportUtil.ExportType.values());
             Theme.styleComboBox(typeCombo);
+            typeCombo.setBackground(Theme.SURFACE);
+            typeCombo.setForeground(Theme.TEXT);
             panel.add(typeCombo, gbc);
 
             // Format selection
@@ -1430,8 +1432,8 @@ public class ProjectFrame extends JFrame {
     private void exportFileMap() {
         try {
             // Create export options dialog
-            JDialog optionsDialog = new JDialog(this, "Export File Map", true);
-            optionsDialog.setSize(350, 200);
+                    JDialog optionsDialog = new JDialog(this, "Export File Map", true);
+        optionsDialog.setSize(350, 250);
             optionsDialog.setLocationRelativeTo(this);
             optionsDialog.setResizable(false);
 
@@ -1447,6 +1449,18 @@ public class ProjectFrame extends JFrame {
             JCheckBox includeChecksums = new JCheckBox("Include file checksums (slower but more detailed)");
             includeChecksums.setForeground(Theme.TEXT);
             panel.add(includeChecksums, gbc);
+            
+            // Directory depth option
+            JLabel depthLabel = new JLabel("Max directory depth:");
+            depthLabel.setForeground(Theme.TEXT);
+            panel.add(depthLabel, gbc);
+            
+            JSpinner depthSpinner = new JSpinner(new SpinnerNumberModel(10, 1, 50, 1));
+            depthSpinner.setPreferredSize(new Dimension(80, 25));
+            Theme.styleSpinner(depthSpinner);
+            depthSpinner.getEditor().setBackground(Theme.SURFACE);
+            depthSpinner.getEditor().setForeground(Theme.TEXT);
+            panel.add(depthSpinner, gbc);
 
             // Buttons
             JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
@@ -1483,7 +1497,8 @@ public class ProjectFrame extends JFrame {
                     }
                     
                     // Export the file map
-                    ExportUtil.exportFileMap(project, file.toPath(), includeChecksums.isSelected());
+                    int maxDepth = (Integer) depthSpinner.getValue();
+                    ExportUtil.exportFileMap(project, file.toPath(), includeChecksums.isSelected(), maxDepth);
                 }
             });
 

@@ -1,8 +1,8 @@
-# Digitizing Assistant v1.6
+# Digitizing Assistant v1.6.1
 
 A Java-based application for managing video digitization projects with enhanced damage tracking and export capabilities.
 
-## New Features in v1.6
+## New Features in v1.6.1
 
 ### Enhanced Damage Management
 - **Damage Status Tracking**: New status options for tracking tape damage:

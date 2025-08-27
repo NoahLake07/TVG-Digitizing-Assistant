@@ -37,7 +37,7 @@ public class ConversionPanel extends JPanel {
     ProjectFrame projectFrame;
     Conversion conversion;
 
-    JPanel typeRow, noteRow, dataOnlyRow, technicianNotesRow, filesPanel, filenamePanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow;
+    JPanel typeRow, noteRow, dataOnlyRow, technicianNotesRow, filesPanel, filenamePanel, dateRow, timeRow, buttonRow, statusRow, tapeDurationRow, damagePanel;
     JLabel header, type, note, technicianNotes;
     JList<FileReference> filesList;
     JComboBox<Type> typeSelector;
@@ -723,6 +723,9 @@ public class ConversionPanel extends JPanel {
                 dateRow.setVisible(true);
                 timeRow.setVisible(true);
             }
+            
+            // Update damage panel visibility
+            updateDamagePanelVisibility();
         });
 
         statusRow.add(statusIndicator);
@@ -758,8 +761,21 @@ public class ConversionPanel extends JPanel {
         add(Box.createVerticalStrut(15));
         add(statusRow);
         add(Box.createVerticalStrut(15));
-        add(createDamageManagementPanel());
-        add(Box.createVerticalStrut(15));
+        
+        // Create damage management panel but don't add it yet
+        damagePanel = createDamageManagementPanel();
+        
+        // Only show damage panel if conversion has damage history or is in a damaged status
+        boolean showDamagePanel = (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) ||
+                                  conversion.status == ConversionStatus.DAMAGED ||
+                                  conversion.status == ConversionStatus.DAMAGE_FIXED ||
+                                  conversion.status == ConversionStatus.DAMAGE_IRREVERSIBLE;
+        
+        if (showDamagePanel) {
+            add(damagePanel);
+            add(Box.createVerticalStrut(15));
+        }
+        
         add(dateRow);
         add(Box.createVerticalStrut(15));
         add(timeRow);
@@ -1245,18 +1261,21 @@ public class ConversionPanel extends JPanel {
             conversion.status = ConversionStatus.DAMAGED;
             statusSelector.setSelectedItem(ConversionStatus.DAMAGED);
             projectFrame.markUnsavedChanges();
+            updateDamagePanelVisibility();
         });
 
         markFixedBtn.addActionListener(e -> {
             conversion.status = ConversionStatus.DAMAGE_FIXED;
             statusSelector.setSelectedItem(ConversionStatus.DAMAGE_FIXED);
             projectFrame.markUnsavedChanges();
+            updateDamagePanelVisibility();
         });
 
         markIrreversibleBtn.addActionListener(e -> {
             conversion.status = ConversionStatus.DAMAGE_IRREVERSIBLE;
             statusSelector.setSelectedItem(ConversionStatus.DAMAGE_IRREVERSIBLE);
             projectFrame.markUnsavedChanges();
+            updateDamagePanelVisibility();
         });
 
         addDamageEventBtn.addActionListener(e -> showAddDamageEventDialog());
@@ -1356,6 +1375,9 @@ public class ConversionPanel extends JPanel {
             
             // Update the damage history display
             updateDamageHistoryDisplay();
+            
+            // Show the damage panel if it was hidden
+            updateDamagePanelVisibility();
         });
 
         cancelButton.addActionListener(e -> dialog.dispose());
@@ -1402,6 +1424,20 @@ public class ConversionPanel extends JPanel {
                 sb.append("\n");
             }
             textArea.setText(sb.toString());
+        }
+    }
+
+    private void updateDamagePanelVisibility() {
+        if (damagePanel != null) {
+            ConversionStatus currentStatus = (ConversionStatus) statusSelector.getSelectedItem();
+            boolean shouldShow = (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) ||
+                                currentStatus == ConversionStatus.DAMAGED ||
+                                currentStatus == ConversionStatus.DAMAGE_FIXED ||
+                                currentStatus == ConversionStatus.DAMAGE_IRREVERSIBLE;
+            
+            damagePanel.setVisible(shouldShow);
+            revalidate();
+            repaint();
         }
     }
 

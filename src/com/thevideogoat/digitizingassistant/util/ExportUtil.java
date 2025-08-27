@@ -161,6 +161,10 @@ public class ExportUtil {
     }
     
     public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums) {
+        exportFileMap(project, outputPath, includeChecksums, 10); // Default max depth of 10
+    }
+    
+    public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums, int maxDepth) {
         try {
             JsonObject fileMapJson = new JsonObject();
             fileMapJson.addProperty("projectName", project.getName());
@@ -172,28 +176,8 @@ public class ExportUtil {
             for (Conversion conversion : project.getConversions()) {
                 if (conversion.linkedFiles != null) {
                     for (var fileRef : conversion.linkedFiles) {
-                        JsonObject fileJson = new JsonObject();
-                        fileJson.addProperty("tapeName", conversion.name);
-                        fileJson.addProperty("filePath", fileRef.getPath());
-                        fileJson.addProperty("conversionStatus", conversion.status.toString());
-                        
-                        if (fileRef.exists()) {
-                            try {
-                                java.nio.file.Path path = Paths.get(fileRef.getPath());
-                                fileJson.addProperty("fileSize", Files.size(path));
-                                fileJson.addProperty("lastModified", Files.getLastModifiedTime(path).toString());
-                                
-                                if (includeChecksums) {
-                                    fileJson.addProperty("checksum", calculateChecksum(path));
-                                }
-                            } catch (Exception e) {
-                                fileJson.addProperty("error", "Could not read file: " + e.getMessage());
-                            }
-                        } else {
-                            fileJson.addProperty("error", "File not found");
-                        }
-                        
-                        filesArray.add(fileJson);
+                        // Process the linked file/directory
+                        processFileOrDirectory(fileRef, conversion, filesArray, includeChecksums, maxDepth);
                     }
                 }
             }
@@ -215,6 +199,81 @@ public class ExportUtil {
                 "Error exporting file map: " + e.getMessage(),
                 "Export Error", 
                 JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private static void processFileOrDirectory(FileReference fileRef, Conversion conversion, JsonArray filesArray, boolean includeChecksums, int maxDepth) {
+        try {
+            java.nio.file.Path path = Paths.get(fileRef.getPath());
+            
+            if (Files.exists(path)) {
+                if (Files.isDirectory(path)) {
+                    // If it's a directory, explore all files within it
+                    exploreDirectory(path, conversion, filesArray, includeChecksums, maxDepth);
+                } else {
+                    // If it's a file, process it directly
+                    addFileToArray(path, conversion, filesArray, includeChecksums);
+                }
+            } else {
+                // File/directory doesn't exist
+                JsonObject fileJson = new JsonObject();
+                fileJson.addProperty("tapeName", conversion.name);
+                fileJson.addProperty("filePath", fileRef.getPath());
+                fileJson.addProperty("conversionStatus", conversion.status.toString());
+                fileJson.addProperty("error", "File not found");
+                filesArray.add(fileJson);
+            }
+        } catch (Exception e) {
+            JsonObject fileJson = new JsonObject();
+            fileJson.addProperty("tapeName", conversion.name);
+            fileJson.addProperty("filePath", fileRef.getPath());
+            fileJson.addProperty("conversionStatus", conversion.status.toString());
+            fileJson.addProperty("error", "Could not process: " + e.getMessage());
+            filesArray.add(fileJson);
+        }
+    }
+    
+    private static void exploreDirectory(java.nio.file.Path dirPath, Conversion conversion, JsonArray filesArray, boolean includeChecksums, int maxDepth) {
+        try {
+            Files.walk(dirPath, maxDepth)
+                .filter(Files::isRegularFile) // Only include regular files, not directories
+                .forEach(filePath -> addFileToArray(filePath, conversion, filesArray, includeChecksums));
+        } catch (Exception e) {
+            JsonObject fileJson = new JsonObject();
+            fileJson.addProperty("tapeName", conversion.name);
+            fileJson.addProperty("filePath", dirPath.toString());
+            fileJson.addProperty("conversionStatus", conversion.status.toString());
+            fileJson.addProperty("error", "Could not explore directory: " + e.getMessage());
+            filesArray.add(fileJson);
+        }
+    }
+    
+    private static void addFileToArray(java.nio.file.Path filePath, Conversion conversion, JsonArray filesArray, boolean includeChecksums) {
+        try {
+            JsonObject fileJson = new JsonObject();
+            fileJson.addProperty("tapeName", conversion.name);
+            fileJson.addProperty("filePath", filePath.toString());
+            fileJson.addProperty("fileName", filePath.getFileName().toString());
+            fileJson.addProperty("conversionStatus", conversion.status.toString());
+            fileJson.addProperty("fileSize", Files.size(filePath));
+            fileJson.addProperty("lastModified", Files.getLastModifiedTime(filePath).toString());
+            
+            if (includeChecksums) {
+                try {
+                    fileJson.addProperty("checksum", calculateChecksum(filePath));
+                } catch (Exception e) {
+                    fileJson.addProperty("checksumError", "Could not calculate checksum: " + e.getMessage());
+                }
+            }
+            
+            filesArray.add(fileJson);
+        } catch (Exception e) {
+            JsonObject fileJson = new JsonObject();
+            fileJson.addProperty("tapeName", conversion.name);
+            fileJson.addProperty("filePath", filePath.toString());
+            fileJson.addProperty("conversionStatus", conversion.status.toString());
+            fileJson.addProperty("error", "Could not read file: " + e.getMessage());
+            filesArray.add(fileJson);
         }
     }
     

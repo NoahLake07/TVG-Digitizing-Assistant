@@ -27,7 +27,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.6";
+    public static final String VERSION = "1.6.1";
 
     private static DigitizingAssistant instance;
 
@@ -492,7 +492,7 @@ public class DigitizingAssistant {
         }
 
         if (showWelcome) {
-            // Show welcome message for version 1.5
+            // Show welcome message for version 1.6.1
             JPanel welcomePanel = new JPanel(new BorderLayout(10, 10));
             welcomePanel.setBackground(Color.WHITE);
             welcomePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -516,14 +516,14 @@ public class DigitizingAssistant {
             contentPanel.add(Box.createVerticalStrut(10));
             
             String[] features = {
-                "• Data-Only Conversions: Mark conversions as pure data storage",
-                "• Misc Data Storage Format: For SD cards, hard drives, etc.",
-                "• Technician Notes: Internal logging field for observations",
-                "• File Map Visualization: Hierarchical view of linked files and contents",
-                "• Professional Export System: 'Write to Destination' for client delivery",
-                "• Auto-Sort: Conversions automatically sorted on save",
-                "• Silent Saves: Removed confirmation dialogs for smoother workflow",
-                "• Enhanced File Management: Better bulk operations and relinking"
+                "• Enhanced Damage Management: Track damage events with timestamps and notes",
+                "• New Damage Statuses: 'Damage Fixed' and 'Damage Irreversible' options",
+                "• Advanced Export Capabilities: Digitizing sheets and comprehensive file maps",
+                "• Smart Damage Panel: Only appears when damage is detected or recorded",
+                "• Directory Exploration: File map export now explores directories recursively",
+                "• Timestamp Preservation: Fixed conversion dates/times reset issue",
+                "• Professional Reports: Client, archival, and technician export versions",
+                "• Improved UI: Better contrast and streamlined damage workflow"
             };
             
             for (String feature : features) {
@@ -537,10 +537,10 @@ public class DigitizingAssistant {
             contentPanel.add(Box.createVerticalStrut(15));
             
             // Note about new capabilities
-            JLabel noteLabel = new JLabel("<html><body style='width: 400px'>" +
-                "<b>Professional Workflow:</b> Version 1.5 transforms the app into a complete project delivery system. " +
-                "Use the new export feature to create professional client deliveries with proper folder structure and file organization. " +
-                "The new File Map feature provides a clear view of your project structure and file contents.</body></html>");
+            JLabel noteLabel = new JLabel("<html><body style='width: 450px'>" +
+                "<b>Professional Damage Tracking:</b> Version 1.6.1 introduces comprehensive damage management for professional digitization workflows. " +
+                "Track damage events with detailed timestamps, mark tapes as fixed or irreversible, and generate professional reports for clients and archives. " +
+                "The enhanced export system provides complete file maps and digitizing sheets suitable for different audiences.</body></html>");
             noteLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             noteLabel.setForeground(Color.BLACK);
             contentPanel.add(noteLabel);
