@@ -1,99 +1,112 @@
-# Tape Digitizing Assistant
-TVG Digitizing Assistant is a Java-based desktop application designed to assist with the process of digitizing media and managing data storage devices. The application provides a user-friendly interface for managing and tracking the conversion of various media types and data recovery projects.
+# Digitizing Assistant v1.6
+
+A Java-based application for managing video digitization projects with enhanced damage tracking and export capabilities.
+
+## New Features in v1.6
+
+### Enhanced Damage Management
+- **Damage Status Tracking**: New status options for tracking tape damage:
+  - `DAMAGE_FIXED`: Mark tapes that were damaged but have been repaired
+  - `DAMAGE_IRREVERSIBLE`: Mark tapes with permanent damage that cannot be recovered
+- **Damage Event History**: Record detailed damage events with timestamps and technician notes
+- **Visual Status Indicators**: Color-coded status display for easy identification
+
+### Export Capabilities
+- **Digitizing Sheet Export**: Generate comprehensive reports in multiple formats:
+  - **Client Version**: Clean, minimal information suitable for client delivery
+  - **Archival Version**: Detailed information including damage history and technician notes
+  - **Technician Version**: Complete technical details including file paths and workflow logs
+- **File Map Export**: Generate comprehensive file maps with:
+  - File paths and associated tape IDs
+  - Conversion statuses and metadata
+  - Optional MD5 checksums for file integrity verification
+- **Multiple Export Formats**: Support for CSV and JSON formats
+
+### Bug Fixes
+- **Timestamp Preservation**: Fixed issue where conversion dates/times were reset when loading projects
+- **Enhanced Data Persistence**: Improved handling of damage history and technician notes
 
 ## Features
 
-### Core Functionality
-- **Project Management**: Create and manage projects for different clients. Each project can contain multiple conversions, and each conversion represents a single digitization or data recovery task.
-- **Conversion Management**: Within each project, users can create and manage conversions with detailed tracking including name, notes, technician notes, type, date/time of conversion, and status.
-- **File Management**: Link multiple files to each conversion, with support for bulk renaming, relinking, and file organization.
-- **Data Persistence**: Save project state to JSON files for easy backup and sharing.
+### Project Management
+- Create and manage digitization projects
+- Track multiple video formats (VHS, Betamax, etc.)
+- Organize conversions with notes and status tracking
+- Link media files to conversions
 
-### Version 1.5 New Features
-- **Data-Only Conversions**: Mark conversions as pure data storage (SD cards, hard drives, etc.) with special handling in export operations.
-- **Misc Data Storage Format**: New format type specifically for data storage devices.
-- **Technician Notes**: Internal logging field for technician-specific notes and observations.
-- **Silent Saves**: Removed confirmation dialogs for smoother workflow.
-- **Auto-Sort**: Conversions automatically sorted by name when projects are saved.
-- **File Map Visualization**: "Show File Map" button displays linked files in a hierarchical tree view with:
-  - Full file path structure visualization
-  - File size and properties display
-  - Right-click context menu for file operations
-  - Missing file detection and indication
-- **Professional Export System**: "Write Conversions To Destination" feature for client delivery with:
-  - Destination folder selection
-  - Option to create separate folders per conversion
-  - File renaming options (with special handling for data-only conversions)
-  - Preview functionality before export
-  - Comprehensive logging and error handling
-  - Support for subdirectory inclusion
+### Conversion Tracking
+- Status management (Not Started, In Progress, Basic Editing, Completed, Damaged, etc.)
+- Date and time tracking for conversions
+- Duration tracking for completed conversions
+- Technician notes and damage history
 
-### Advanced Features
-- **Bulk Operations**: Rename all files in a project or conversion with various options
-- **File Relinking**: Easily relink files that have been moved or renamed
-- **Trimmed File Support**: Automatic detection and relinking of trimmed media files
-- **Search and Filter**: Find conversions quickly with real-time search
-- **Status Tracking**: Track conversion progress from not started to completed
-- **Media Statistics**: View detailed statistics about project files and durations
+### File Management
+- Link multiple files to conversions
+- Support for various video file formats
+- File validation and integrity checking
+- Bulk file operations and relinking
 
-## Supported Media Types
-- VHS, VHS-C, 8mm, Betamax, MiniDV
-- CD/DVD, Type II
-- Misc Data Storage (SD cards, hard drives, etc.)
+### Export and Reporting
+- Export project data as JSON
+- Generate digitizing sheets for clients and archives
+- Create comprehensive file maps
+- Media statistics and analysis
 
-## Application Screenshots
+## Installation
 
-![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/010f61b9-0621-46b1-a73e-adfc59f22ee8)
-
-Home - Project select page
-
-![image](https://github.com/NoahLake07/Tape-Digitizing-Assistant/assets/98616672/208908e1-9145-4bb8-9862-541c5ba35101)
-
-The conversion details & management page
-
-## Framework
-- **Java**: The application is written entirely in Java, making it platform-independent.
-- **Swing**: The user interface is built using the Swing toolkit, providing a native look and feel across platforms.
-- **Gson**: JSON serialization for project file format.
-
-## Downloads
-**Latest Version**: 1.5 - Professional project delivery system with data-only conversion support
-
-Previous Versions:
-- Version 1.4: Enhanced file management and renaming features
-- Version 1.3: Improved UI and project organization
-- Version 1.2: Added file linking and basic renaming
-- Version 1.1: Core project management features
-- Version 1.0: Initial release
+1. Ensure you have Java 11 or higher installed
+2. Download the latest release
+3. Run the application using your preferred Java IDE or command line
 
 ## Usage
 
-### Creating a New Project
+### Creating a Project
 1. Launch the application
 2. Click "New Project" and enter a project name
-3. Add conversions using the "+ New Conversion" button
+3. Add conversions for each tape you want to digitize
 
 ### Managing Conversions
-- Set conversion type (VHS, data storage, etc.)
-- Add conversion notes and technician notes
-- Mark as data-only if handling storage devices
-- Link relevant files to the conversion
-- Track progress with status updates
+1. Select a conversion from the list
+2. Set the format type (VHS, Betamax, etc.)
+3. Add notes and technician information
+4. Link media files as they become available
+5. Update status as work progresses
 
-### Exporting for Client Delivery
-1. Use "Write Conversions To Destination" from the project menu
-2. Select destination folder
-3. Choose export options (folders per conversion, file renaming, etc.)
-4. Preview the export structure
-5. Execute the export with full logging
+### Damage Management
+1. Use the damage management panel to record damage events
+2. Mark tapes as damaged, fixed, or irreversible
+3. Add detailed descriptions and technician notes
+4. Track the complete damage history
 
-### File Management
-- Right-click files for individual operations
-- Use bulk rename options for entire conversions or projects
-- Relink files that have been moved or renamed
-- Search for and link trimmed versions of media files
+### Exporting Data
+1. Use the project menu to access export options
+2. Choose export type and format
+3. Select output location
+4. Generate reports for clients, archives, or technical analysis
 
-## Development
-This application is actively developed and welcomes contributions! The codebase is structured for easy extension and modification.
+## File Structure
 
-Please note that this application is designed for professional digitization workflows and includes comprehensive logging and error handling for production use.
+```
+DigitizingAssistant/
+├── src/
+│   └── com/thevideogoat/digitizingassistant/
+│       ├── data/           # Data models and persistence
+│       ├── ui/             # User interface components
+│       └── util/           # Utility classes and export functions
+├── res/                    # Application resources
+└── target/                 # Compiled classes
+```
+
+## Dependencies
+
+- Java 11+
+- Gson (for JSON handling)
+- VLCJ (for video processing)
+
+## Contributing
+
+This project is maintained by The Video Goat. For issues or feature requests, please contact the development team.
+
+## License
+
+Proprietary software - All rights reserved.

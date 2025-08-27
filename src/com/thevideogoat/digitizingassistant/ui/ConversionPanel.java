@@ -758,6 +758,8 @@ public class ConversionPanel extends JPanel {
         add(Box.createVerticalStrut(15));
         add(statusRow);
         add(Box.createVerticalStrut(15));
+        add(createDamageManagementPanel());
+        add(Box.createVerticalStrut(15));
         add(dateRow);
         add(Box.createVerticalStrut(15));
         add(timeRow);
@@ -1200,6 +1202,206 @@ public class ConversionPanel extends JPanel {
         @Override
         public String toString() {
             return name;
+        }
+    }
+
+    private JPanel createDamageManagementPanel() {
+        JPanel damagePanel = new JPanel(new BorderLayout());
+        damagePanel.setMaximumSize(new Dimension(Short.MAX_VALUE, 200));
+        damagePanel.setBackground(Theme.BACKGROUND);
+        damagePanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                "Damage Management",
+                TitledBorder.LEFT,
+                TitledBorder.TOP,
+                Theme.NORMAL_FONT,
+                Theme.TEXT
+            ),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+
+        // Damage status buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttonPanel.setOpaque(false);
+
+        JButton markDamagedBtn = new JButton("Mark as Damaged");
+        JButton markFixedBtn = new JButton("Mark as Fixed");
+        JButton markIrreversibleBtn = new JButton("Mark as Irreversible");
+        JButton addDamageEventBtn = new JButton("Add Damage Event");
+
+        Theme.styleButton(markDamagedBtn);
+        Theme.styleButton(markFixedBtn);
+        Theme.styleButton(markIrreversibleBtn);
+        Theme.styleButton(addDamageEventBtn);
+
+        // Set button colors based on status
+        markDamagedBtn.setBackground(Color.RED);
+        markFixedBtn.setBackground(new Color(255, 165, 0)); // Orange
+        markIrreversibleBtn.setBackground(new Color(128, 0, 128)); // Purple
+
+        // Add action listeners
+        markDamagedBtn.addActionListener(e -> {
+            conversion.status = ConversionStatus.DAMAGED;
+            statusSelector.setSelectedItem(ConversionStatus.DAMAGED);
+            projectFrame.markUnsavedChanges();
+        });
+
+        markFixedBtn.addActionListener(e -> {
+            conversion.status = ConversionStatus.DAMAGE_FIXED;
+            statusSelector.setSelectedItem(ConversionStatus.DAMAGE_FIXED);
+            projectFrame.markUnsavedChanges();
+        });
+
+        markIrreversibleBtn.addActionListener(e -> {
+            conversion.status = ConversionStatus.DAMAGE_IRREVERSIBLE;
+            statusSelector.setSelectedItem(ConversionStatus.DAMAGE_IRREVERSIBLE);
+            projectFrame.markUnsavedChanges();
+        });
+
+        addDamageEventBtn.addActionListener(e -> showAddDamageEventDialog());
+
+        buttonPanel.add(markDamagedBtn);
+        buttonPanel.add(Box.createHorizontalStrut(10));
+        buttonPanel.add(markFixedBtn);
+        buttonPanel.add(Box.createHorizontalStrut(10));
+        buttonPanel.add(markIrreversibleBtn);
+        buttonPanel.add(Box.createHorizontalStrut(10));
+        buttonPanel.add(addDamageEventBtn);
+
+        // Damage history display
+        JTextArea damageHistoryArea = new JTextArea();
+        damageHistoryArea.setEditable(false);
+        damageHistoryArea.setBackground(Theme.SURFACE);
+        damageHistoryArea.setForeground(Theme.TEXT);
+        damageHistoryArea.setFont(Theme.NORMAL_FONT);
+        damageHistoryArea.setRows(3);
+
+        updateDamageHistoryDisplay(damageHistoryArea);
+
+        JScrollPane scrollPane = new JScrollPane(damageHistoryArea);
+        scrollPane.setPreferredSize(new Dimension(400, 80));
+        scrollPane.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
+
+        damagePanel.add(buttonPanel, BorderLayout.NORTH);
+        damagePanel.add(scrollPane, BorderLayout.CENTER);
+
+        return damagePanel;
+    }
+
+    private void showAddDamageEventDialog() {
+        JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Add Damage Event", true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        dialog.setResizable(false);
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        Theme.stylePanel(panel);
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridwidth = GridBagConstraints.REMAINDER;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(5, 5, 5, 5);
+
+        // Description field
+        JLabel descLabel = new JLabel("Damage Description:");
+        descLabel.setForeground(Theme.TEXT);
+        panel.add(descLabel, gbc);
+
+        JTextArea descArea = new JTextArea(3, 30);
+        descArea.setLineWrap(true);
+        descArea.setWrapStyleWord(true);
+        descArea.setBackground(Theme.SURFACE);
+        descArea.setForeground(Theme.TEXT);
+        descArea.setFont(Theme.NORMAL_FONT);
+        JScrollPane descScroll = new JScrollPane(descArea);
+        panel.add(descScroll, gbc);
+
+        // Technician notes field
+        JLabel notesLabel = new JLabel("Technician Notes:");
+        notesLabel.setForeground(Theme.TEXT);
+        panel.add(notesLabel, gbc);
+
+        JTextArea notesArea = new JTextArea(3, 30);
+        notesArea.setLineWrap(true);
+        notesArea.setWrapStyleWord(true);
+        notesArea.setBackground(Theme.SURFACE);
+        notesArea.setForeground(Theme.TEXT);
+        notesArea.setFont(Theme.NORMAL_FONT);
+        JScrollPane notesScroll = new JScrollPane(notesArea);
+        panel.add(notesScroll, gbc);
+
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        buttonPanel.setOpaque(false);
+
+        JButton addButton = new JButton("Add Event");
+        JButton cancelButton = new JButton("Cancel");
+        Theme.styleButton(addButton);
+        Theme.styleButton(cancelButton);
+
+        addButton.addActionListener(e -> {
+            String description = descArea.getText().trim();
+            if (description.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, 
+                    "Please enter a damage description.",
+                    "Missing Description",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            conversion.addDamageEvent(description, notesArea.getText().trim());
+            projectFrame.markUnsavedChanges();
+            dialog.dispose();
+            
+            // Update the damage history display
+            updateDamageHistoryDisplay();
+        });
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+
+        buttonPanel.add(addButton);
+        buttonPanel.add(cancelButton);
+        panel.add(buttonPanel, gbc);
+
+        dialog.add(panel);
+        dialog.setVisible(true);
+    }
+
+    private void updateDamageHistoryDisplay() {
+        // Find the damage history text area and update it
+        for (Component comp : getComponents()) {
+            if (comp instanceof JPanel) {
+                JPanel panel = (JPanel) comp;
+                for (Component subComp : panel.getComponents()) {
+                    if (subComp instanceof JScrollPane) {
+                        JScrollPane scrollPane = (JScrollPane) subComp;
+                        Component view = scrollPane.getViewport().getView();
+                        if (view instanceof JTextArea) {
+                            updateDamageHistoryDisplay((JTextArea) view);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void updateDamageHistoryDisplay(JTextArea textArea) {
+        if (conversion.damageHistory == null || conversion.damageHistory.isEmpty()) {
+            textArea.setText("No damage events recorded.");
+        } else {
+            StringBuilder sb = new StringBuilder();
+            for (Conversion.DamageEvent event : conversion.damageHistory) {
+                sb.append(String.format("[%s] %s\n", 
+                    event.timestamp.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
+                    event.description));
+                if (!event.technicianNotes.isEmpty()) {
+                    sb.append("  Notes: ").append(event.technicianNotes).append("\n");
+                }
+                sb.append("\n");
+            }
+            textArea.setText(sb.toString());
         }
     }
 

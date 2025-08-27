@@ -31,6 +31,7 @@ import java.io.InputStreamReader;
 
 import com.thevideogoat.digitizingassistant.data.FileReference;
 import com.thevideogoat.digitizingassistant.util.FileCacheManager;
+import com.thevideogoat.digitizingassistant.util.ExportUtil;
 
 public class ProjectFrame extends JFrame {
 
@@ -132,6 +133,8 @@ public class ProjectFrame extends JFrame {
         
         JMenuItem refreshList = new JMenuItem("Refresh List");
         JMenuItem exportProject = new JMenuItem("Export Project as JSON");
+        JMenuItem exportDigitizingSheet = new JMenuItem("Export Digitizing Sheet");
+        JMenuItem exportFileMap = new JMenuItem("Export File Map");
         JMenuItem mediaStats = new JMenuItem("Media Statistics");
         JMenuItem relinkTrimmed = new JMenuItem("Relink to Trimmed Files");
         JMenuItem findAndRelinkTrimmed = new JMenuItem("Find and Relink Trimmed Media");
@@ -141,6 +144,8 @@ public class ProjectFrame extends JFrame {
         // Add tooltips to menu items
         refreshList.setToolTipText("Refresh the conversion list to show any external changes");
         exportProject.setToolTipText("Export project data as JSON file for backup or sharing");
+        exportDigitizingSheet.setToolTipText("Export a detailed digitizing sheet with conversion information");
+        exportFileMap.setToolTipText("Export a comprehensive map of all files in the project");
         mediaStats.setToolTipText("View statistics about all media files in the project");
         relinkTrimmed.setToolTipText("Relink files to their trimmed versions in the same directory");
         findAndRelinkTrimmed.setToolTipText("Search subdirectories for trimmed versions of linked files");
@@ -149,6 +154,8 @@ public class ProjectFrame extends JFrame {
         
         refreshList.addActionListener(e -> refreshConversionList());
         exportProject.addActionListener(e -> exportProjectAsJson());
+        exportDigitizingSheet.addActionListener(e -> exportDigitizingSheet());
+        exportFileMap.addActionListener(e -> exportFileMap());
         mediaStats.addActionListener(e -> showMediaStatistics());
         relinkTrimmed.addActionListener(e -> Util.relinkToTrimmedFiles(project));
         findAndRelinkTrimmed.addActionListener(e -> {
@@ -426,6 +433,8 @@ public class ProjectFrame extends JFrame {
         
         menu.add(refreshList);
         menu.add(exportProject);
+        menu.add(exportDigitizingSheet);
+        menu.add(exportFileMap);
         menu.addSeparator();
         menu.add(mediaStats);
         menu.add(relinkTrimmed);
@@ -1308,6 +1317,188 @@ public class ProjectFrame extends JFrame {
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this, 
                 "Error exporting project: " + ex.getMessage(),
+                "Export Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void exportDigitizingSheet() {
+        try {
+            // Create export options dialog
+            JDialog optionsDialog = new JDialog(this, "Export Digitizing Sheet", true);
+            optionsDialog.setSize(400, 300);
+            optionsDialog.setLocationRelativeTo(this);
+            optionsDialog.setResizable(false);
+
+            JPanel panel = new JPanel(new GridBagLayout());
+            Theme.stylePanel(panel);
+            panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridwidth = GridBagConstraints.REMAINDER;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.insets = new Insets(5, 5, 5, 5);
+
+            // Export type selection
+            JLabel typeLabel = new JLabel("Export Type:");
+            typeLabel.setForeground(Theme.TEXT);
+            panel.add(typeLabel, gbc);
+
+            JComboBox<ExportUtil.ExportType> typeCombo = new JComboBox<>(ExportUtil.ExportType.values());
+            Theme.styleComboBox(typeCombo);
+            panel.add(typeCombo, gbc);
+
+            // Format selection
+            JLabel formatLabel = new JLabel("Format:");
+            formatLabel.setForeground(Theme.TEXT);
+            panel.add(formatLabel, gbc);
+
+            JCheckBox csvCheck = new JCheckBox("CSV", true);
+            JCheckBox jsonCheck = new JCheckBox("JSON", true);
+            csvCheck.setForeground(Theme.TEXT);
+            jsonCheck.setForeground(Theme.TEXT);
+
+            JPanel formatPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+            formatPanel.setOpaque(false);
+            formatPanel.add(csvCheck);
+            formatPanel.add(jsonCheck);
+            panel.add(formatPanel, gbc);
+
+            // Buttons
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            buttonPanel.setOpaque(false);
+
+            JButton exportButton = new JButton("Export");
+            JButton cancelButton = new JButton("Cancel");
+            Theme.styleButton(exportButton);
+            Theme.styleButton(cancelButton);
+
+            exportButton.addActionListener(e -> {
+                if (!csvCheck.isSelected() && !jsonCheck.isSelected()) {
+                    JOptionPane.showMessageDialog(optionsDialog, 
+                        "Please select at least one format.",
+                        "No Format Selected",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                optionsDialog.dispose();
+                
+                // Choose output directory
+                JFileChooser dirChooser = new JFileChooser();
+                dirChooser.setDialogTitle("Select Export Directory");
+                dirChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                
+                String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                if (lastDir != null && new File(lastDir).exists()) {
+                    dirChooser.setCurrentDirectory(new File(lastDir));
+                }
+                
+                if (dirChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                    File outputDir = dirChooser.getSelectedFile();
+                    
+                    // Save the directory as the last used directory
+                    Preferences.getInstance().setLastUsedDirectory(outputDir.getAbsolutePath());
+                    
+                    // Export the digitizing sheet
+                    ExportUtil.exportDigitizingSheet(
+                        project, 
+                        outputDir.toPath(), 
+                        (ExportUtil.ExportType) typeCombo.getSelectedItem(),
+                        csvCheck.isSelected(),
+                        jsonCheck.isSelected()
+                    );
+                }
+            });
+
+            cancelButton.addActionListener(e -> optionsDialog.dispose());
+
+            buttonPanel.add(exportButton);
+            buttonPanel.add(cancelButton);
+            panel.add(buttonPanel, gbc);
+
+            optionsDialog.add(panel);
+            optionsDialog.setVisible(true);
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, 
+                "Error exporting digitizing sheet: " + ex.getMessage(),
+                "Export Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void exportFileMap() {
+        try {
+            // Create export options dialog
+            JDialog optionsDialog = new JDialog(this, "Export File Map", true);
+            optionsDialog.setSize(350, 200);
+            optionsDialog.setLocationRelativeTo(this);
+            optionsDialog.setResizable(false);
+
+            JPanel panel = new JPanel(new GridBagLayout());
+            Theme.stylePanel(panel);
+            panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridwidth = GridBagConstraints.REMAINDER;
+            gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.insets = new Insets(5, 5, 5, 5);
+
+            // Include checksums option
+            JCheckBox includeChecksums = new JCheckBox("Include file checksums (slower but more detailed)");
+            includeChecksums.setForeground(Theme.TEXT);
+            panel.add(includeChecksums, gbc);
+
+            // Buttons
+            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
+            buttonPanel.setOpaque(false);
+
+            JButton exportButton = new JButton("Export");
+            JButton cancelButton = new JButton("Cancel");
+            Theme.styleButton(exportButton);
+            Theme.styleButton(cancelButton);
+
+            exportButton.addActionListener(e -> {
+                optionsDialog.dispose();
+                
+                // Choose output file
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("Save File Map");
+                fileChooser.setFileFilter(new FileNameExtensionFilter("JSON files", "json"));
+                
+                String lastDir = Preferences.getInstance().getLastUsedDirectory();
+                if (lastDir != null && new File(lastDir).exists()) {
+                    fileChooser.setCurrentDirectory(new File(lastDir));
+                }
+                
+                if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                    File file = fileChooser.getSelectedFile();
+                    if (!file.getName().toLowerCase().endsWith(".json")) {
+                        file = new File(file.getParentFile(), file.getName() + ".json");
+                    }
+                    
+                    // Save the parent directory as the last used directory
+                    File parentDir = file.getParentFile();
+                    if (parentDir != null && parentDir.exists()) {
+                        Preferences.getInstance().setLastUsedDirectory(parentDir.getAbsolutePath());
+                    }
+                    
+                    // Export the file map
+                    ExportUtil.exportFileMap(project, file.toPath(), includeChecksums.isSelected());
+                }
+            });
+
+            cancelButton.addActionListener(e -> optionsDialog.dispose());
+
+            buttonPanel.add(exportButton);
+            buttonPanel.add(cancelButton);
+            panel.add(buttonPanel, gbc);
+
+            optionsDialog.add(panel);
+            optionsDialog.setVisible(true);
+
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, 
+                "Error exporting file map: " + ex.getMessage(),
                 "Export Error",
                 JOptionPane.ERROR_MESSAGE);
         }

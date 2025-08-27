@@ -5,7 +5,9 @@ import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
 import java.awt.*;
 import java.io.*;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.List;
 
 public class Conversion implements Serializable {
 
@@ -20,6 +22,7 @@ public class Conversion implements Serializable {
     public String version;
     public Duration duration = Duration.ZERO;
     public boolean isDataOnly = false;
+    public List<DamageEvent> damageHistory = new ArrayList<>();
 
     public Conversion(String name){
         // assign name
@@ -36,6 +39,7 @@ public class Conversion implements Serializable {
         status = ConversionStatus.NOT_STARTED;
         version = DigitizingAssistant.VERSION;
         isDataOnly = false;
+        damageHistory = new ArrayList<>();
     }
 
     @Serial
@@ -49,6 +53,9 @@ public class Conversion implements Serializable {
             technicianNotes = "";
         }
         // isDataOnly defaults to false for legacy conversions
+        if (damageHistory == null) {
+            damageHistory = new ArrayList<>();
+        }
     }
 
     public Color getStatusColor() {
@@ -57,6 +64,10 @@ public class Conversion implements Serializable {
                 return Color.DARK_GRAY;
             case DAMAGED:
                 return Color.RED;
+            case DAMAGE_FIXED:
+                return new Color(255, 165, 0); // Orange - fixed damage
+            case DAMAGE_IRREVERSIBLE:
+                return new Color(128, 0, 128); // Purple - irreversible damage
             case IN_PROGRESS:
                 return Color.ORANGE;
             case BASIC_EDITING:
@@ -68,4 +79,20 @@ public class Conversion implements Serializable {
         }
     }
 
+    public void addDamageEvent(String description, String technicianNotes) {
+        DamageEvent event = new DamageEvent(description, technicianNotes);
+        damageHistory.add(event);
+    }
+
+    public static class DamageEvent implements Serializable {
+        public LocalDateTime timestamp;
+        public String description;
+        public String technicianNotes;
+
+        public DamageEvent(String description, String technicianNotes) {
+            this.timestamp = LocalDateTime.now();
+            this.description = description;
+            this.technicianNotes = technicianNotes;
+        }
+    }
 }

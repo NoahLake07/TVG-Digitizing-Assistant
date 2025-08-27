@@ -73,6 +73,19 @@ public class Project implements Serializable {
                     }
                 }
                 
+                // Handle damage history for version 1.6+
+                if (conversionJson.has("damageHistory")) {
+                    JsonArray damageArray = conversionJson.getAsJsonArray("damageHistory");
+                    conversion.damageHistory = new ArrayList<>();
+                    for (JsonElement damageElement : damageArray) {
+                        JsonObject damageJson = damageElement.getAsJsonObject();
+                        String description = damageJson.get("description").getAsString();
+                        String techNotes = damageJson.has("technicianNotes") ? 
+                            damageJson.get("technicianNotes").getAsString() : "";
+                        conversion.addDamageEvent(description, techNotes);
+                    }
+                }
+                
                 conversion.note = conversionJson.get("note").getAsString();
                 
                 // Handle new fields for version 1.5
@@ -80,6 +93,28 @@ public class Project implements Serializable {
                     conversion.technicianNotes = conversionJson.get("technicianNotes").getAsString();
                 } else {
                     conversion.technicianNotes = "";
+                }
+                
+                // Handle conversion date and time to preserve original timestamps
+                if (conversionJson.has("dateOfConversion")) {
+                    String dateStr = conversionJson.get("dateOfConversion").getAsString();
+                    // Parse the date string (format: "MM/DD/YYYY")
+                    String[] dateParts = dateStr.split("/");
+                    if (dateParts.length == 3) {
+                        conversion.dateOfConversion = new Date(dateParts[1], dateParts[0], dateParts[2]);
+                    }
+                }
+                
+                if (conversionJson.has("timeOfConversion")) {
+                    String timeStr = conversionJson.get("timeOfConversion").getAsString();
+                    // Parse the time string (format: "HH:MM AM/PM")
+                    String[] timeParts = timeStr.split(" ");
+                    if (timeParts.length == 2) {
+                        String[] hourMin = timeParts[0].split(":");
+                        if (hourMin.length == 2) {
+                            conversion.timeOfConversion = new Time(hourMin[0], hourMin[1], timeParts[1]);
+                        }
+                    }
                 }
                 
                 if (conversionJson.has("isDataOnly")) {
@@ -134,6 +169,19 @@ public class Project implements Serializable {
                 conversionJson.addProperty("technicianNotes", conversion.technicianNotes);
                 conversionJson.addProperty("isDataOnly", conversion.isDataOnly);
                 conversionJson.addProperty("duration", conversion.duration.toString());
+                
+                // Add damage history for version 1.6+
+                if (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) {
+                    JsonArray damageArray = new JsonArray();
+                    for (Conversion.DamageEvent event : conversion.damageHistory) {
+                        JsonObject damageJson = new JsonObject();
+                        damageJson.addProperty("timestamp", event.timestamp.toString());
+                        damageJson.addProperty("description", event.description);
+                        damageJson.addProperty("technicianNotes", event.technicianNotes);
+                        damageArray.add(damageJson);
+                    }
+                    conversionJson.add("damageHistory", damageArray);
+                }
                 
                 // Add linked files
                 JsonArray linkedFilesArray = new JsonArray();

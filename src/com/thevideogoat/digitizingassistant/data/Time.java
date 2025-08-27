@@ -16,6 +16,12 @@ public class Time implements Serializable {
         this.minute = String.valueOf(now.getMinute());
     }
 
+    public Time(String hour, String minute, String am_pm) {
+        this.hour = hour;
+        this.minute = minute;
+        this.am_pm = am_pm;
+    }
+
     public String getHour(){
         return this.hour;
     }
@@ -26,5 +32,10 @@ public class Time implements Serializable {
 
     public String getAmPm(){
         return this.am_pm;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s:%s %s", hour, minute, am_pm);
     }
 }

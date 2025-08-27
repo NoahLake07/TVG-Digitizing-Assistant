@@ -27,7 +27,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.5";
+    public static final String VERSION = "1.6";
 
     private static DigitizingAssistant instance;
 
