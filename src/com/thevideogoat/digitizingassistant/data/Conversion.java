@@ -23,6 +23,11 @@ public class Conversion implements Serializable {
     public Duration duration = Duration.ZERO;
     public boolean isDataOnly = false;
     public List<DamageEvent> damageHistory = new ArrayList<>();
+    
+    // Export tracking
+    public boolean hasBeenExported = false;
+    public LocalDateTime lastExportTime = null;
+    public String lastExportType = ""; // "digitizing_sheet", "file_map", "smart_rename"
 
     public Conversion(String name){
         // assign name
@@ -55,6 +60,12 @@ public class Conversion implements Serializable {
         // isDataOnly defaults to false for legacy conversions
         if (damageHistory == null) {
             damageHistory = new ArrayList<>();
+        }
+        // Handle legacy conversions that don't have export tracking
+        if (lastExportTime == null) {
+            hasBeenExported = false;
+            lastExportTime = null;
+            lastExportType = "";
         }
     }
 

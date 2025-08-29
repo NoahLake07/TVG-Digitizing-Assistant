@@ -1,8 +1,20 @@
-# Digitizing Assistant v1.6.1
+# Digitizing Assistant v1.6.2
 
 A Java-based application for managing video digitization projects with enhanced damage tracking and export capabilities.
 
-## New Features in v1.6.1
+## New Features in v1.6.2
+
+### Smart Renaming Analysis
+- **Automatic Content Categorization**: Automatically identifies conversions as video, data, or hybrid content
+- **Hybrid Conversion Detection**: Specifically identifies CDs containing both video and data files
+- **Intelligent Recommendations**: Provides specific renaming strategies for each content type
+- **Manual Attention Guidance**: Highlights conversions that require special processing workflows
+
+### Export Tracking System
+- **Export History**: Track which conversions have been exported and when
+- **Export Type Tracking**: Record the type of export (digitizing sheet, file map, smart rename)
+- **Audit Trail**: Complete history of export activities for professional workflows
+- **Duplicate Prevention**: Avoid re-processing conversions that have already been exported
 
 ### Enhanced Damage Management
 - **Damage Status Tracking**: New status options for tracking tape damage:

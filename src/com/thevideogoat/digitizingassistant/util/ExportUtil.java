@@ -1,6 +1,7 @@
 package com.thevideogoat.digitizingassistant.util;
 
 import com.thevideogoat.digitizingassistant.data.Conversion;
+import com.thevideogoat.digitizingassistant.data.FileReference;
 import com.thevideogoat.digitizingassistant.data.Project;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;

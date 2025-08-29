@@ -28,6 +28,9 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.List;
 
 import com.thevideogoat.digitizingassistant.data.FileReference;
 import com.thevideogoat.digitizingassistant.util.FileCacheManager;
@@ -435,6 +438,12 @@ public class ProjectFrame extends JFrame {
         menu.add(exportProject);
         menu.add(exportDigitizingSheet);
         menu.add(exportFileMap);
+        
+        // Add Smart Renaming menu item
+        JMenuItem smartRename = new JMenuItem("Smart Renaming Analysis");
+        smartRename.setToolTipText("Analyze content and automatically choose the best renaming strategy");
+        smartRename.addActionListener(e -> showSmartRenameDialog());
+        menu.add(smartRename);
         menu.addSeparator();
         menu.add(mediaStats);
         menu.add(relinkTrimmed);
@@ -1409,6 +1418,14 @@ public class ProjectFrame extends JFrame {
                         csvCheck.isSelected(),
                         jsonCheck.isSelected()
                     );
+                    
+                    // Mark all conversions as exported
+                    for (Conversion conversion : project.getConversions()) {
+                        conversion.hasBeenExported = true;
+                        conversion.lastExportTime = java.time.LocalDateTime.now();
+                        conversion.lastExportType = "digitizing_sheet";
+                    }
+                    saveProject();
                 }
             });
 
@@ -1499,6 +1516,14 @@ public class ProjectFrame extends JFrame {
                     // Export the file map
                     int maxDepth = (Integer) depthSpinner.getValue();
                     ExportUtil.exportFileMap(project, file.toPath(), includeChecksums.isSelected(), maxDepth);
+                    
+                    // Mark all conversions as exported
+                    for (Conversion conversion : project.getConversions()) {
+                        conversion.hasBeenExported = true;
+                        conversion.lastExportTime = java.time.LocalDateTime.now();
+                        conversion.lastExportType = "file_map";
+                    }
+                    saveProject();
                 }
             });
 
@@ -2153,5 +2178,387 @@ public class ProjectFrame extends JFrame {
         String message = String.format("Export completed!\n\nCopied: %d files\nErrors: %d\n\nFiles exported to: %s", 
                                       totalCopied, totalErrors, projectFolder.getAbsolutePath());
         JOptionPane.showMessageDialog(this, message, "Export Complete", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showSmartRenameDialog() {
+        try {
+            // Analyze all conversions to categorize them
+            Map<String, ConversionCategory> conversionCategories = analyzeConversions();
+            
+            // Create analysis summary
+            StringBuilder analysis = new StringBuilder();
+            analysis.append("Content Analysis Results:\n\n");
+            
+            int videoCount = 0, dataCount = 0, mixedCount = 0;
+            for (ConversionCategory category : conversionCategories.values()) {
+                switch (category) {
+                    case VIDEO: videoCount++; break;
+                    case DATA: dataCount++; break;
+                    case MIXED: mixedCount++; break;
+                }
+            }
+            
+            analysis.append("• Video CDs: ").append(videoCount).append(" (need HandBrake processing)\n");
+            analysis.append("• Data/Photo CDs: ").append(dataCount).append(" (direct renaming)\n");
+            analysis.append("• Mixed CDs: ").append(mixedCount).append(" (hybrid approach)\n\n");
+            
+            // Show detailed breakdown with export status
+            analysis.append("Detailed Breakdown:\n");
+            analysis.append("Format: [Conversion] → [Category] → [Recommendation] [Export Status]\n\n");
+            
+            List<Conversion> hybridConversions = new ArrayList<>();
+            
+            for (Conversion conversion : project.getConversions()) {
+                ConversionCategory category = conversionCategories.get(conversion.name);
+                String recommendation = getRecommendation(category, conversion);
+                String exportStatus = getExportStatus(conversion);
+                
+                analysis.append("• ").append(conversion.name).append(": ").append(category.toString())
+                       .append(" → ").append(recommendation).append(" ").append(exportStatus).append("\n");
+                
+                // Track hybrid conversions for special attention
+                if (category == ConversionCategory.MIXED) {
+                    hybridConversions.add(conversion);
+                }
+            }
+            
+            // Special section for hybrid conversions that need manual attention
+            if (!hybridConversions.isEmpty()) {
+                analysis.append("\n⚠️  HYBRID CONVERSIONS - MANUAL ATTENTION REQUIRED:\n");
+                analysis.append("These conversions contain both video and data files.\n");
+                analysis.append("Consider processing video files through HandBrake separately.\n\n");
+                
+                for (Conversion conversion : hybridConversions) {
+                    analysis.append("• ").append(conversion.name).append(":\n");
+                    
+                    // Analyze what types of files are present
+                    List<String> videoFiles = new ArrayList<>();
+                    List<String> dataFiles = new ArrayList<>();
+                    
+                    if (conversion.linkedFiles != null) {
+                        for (FileReference fileRef : conversion.linkedFiles) {
+                            if (fileRef.exists()) {
+                                if (fileRef.getFile().isFile()) {
+                                    String extension = getExtension(fileRef).toLowerCase();
+                                    if (isVideoFile(extension)) {
+                                        videoFiles.add(fileRef.getPath());
+                                    } else if (isDataFile(extension)) {
+                                        dataFiles.add(fileRef.getPath());
+                                    }
+                                } else if (fileRef.getFile().isDirectory()) {
+                                    boolean[] dirResult = analyzeDirectory(fileRef.getFile());
+                                    if (dirResult[0]) {
+                                        videoFiles.add(fileRef.getPath() + " (directory)");
+                                    }
+                                    if (dirResult[1]) {
+                                        dataFiles.add(fileRef.getPath() + " (directory)");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!videoFiles.isEmpty()) {
+                        analysis.append("  - Video files: ").append(videoFiles.size()).append(" files\n");
+                    }
+                    if (!dataFiles.isEmpty()) {
+                        analysis.append("  - Data files: ").append(dataFiles.size()).append(" files\n");
+                    }
+                    analysis.append("  - Recommendation: Process video files through HandBrake, then rename\n\n");
+                }
+            }
+            
+            // Create options panel
+            JPanel panel = new JPanel(new BorderLayout(10, 10));
+            
+            // Analysis text area
+            JTextArea analysisArea = new JTextArea(analysis.toString());
+            analysisArea.setEditable(false);
+            analysisArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+            JScrollPane scrollPane = new JScrollPane(analysisArea);
+            scrollPane.setPreferredSize(new Dimension(600, 400));
+            panel.add(scrollPane, BorderLayout.CENTER);
+            
+            // Options panel
+            JPanel optionsPanel = new JPanel(new GridLayout(0, 1, 5, 5));
+            optionsPanel.setBorder(BorderFactory.createTitledBorder("Rename Options"));
+            
+            // Smart rename option
+            JCheckBox smartRename = new JCheckBox("Use Smart Renaming (recommended)", true);
+            smartRename.setToolTipText("Automatically choose the best renaming strategy for each conversion");
+            
+            // Manual override options
+            JCheckBox videoOnly = new JCheckBox("Force all to video naming (1.mp4, 2.mp4...)");
+            JCheckBox dataOnly = new JCheckBox("Force all to descriptive naming (conversion notes)");
+            JCheckBox customOnly = new JCheckBox("Use custom naming for all");
+            
+            // Custom name field
+            JTextField customNameField = new JTextField("Custom_Base_Name");
+            customNameField.setEnabled(false);
+            
+            // Add listeners for mutual exclusivity
+            smartRename.addActionListener(e -> {
+                boolean enabled = !smartRename.isSelected();
+                videoOnly.setEnabled(enabled);
+                dataOnly.setEnabled(enabled);
+                customOnly.setEnabled(enabled);
+                customNameField.setEnabled(customOnly.isSelected() && enabled);
+            });
+            
+            videoOnly.addActionListener(e -> {
+                if (videoOnly.isSelected()) {
+                    dataOnly.setSelected(false);
+                    customOnly.setSelected(false);
+                }
+                customNameField.setEnabled(customOnly.isSelected());
+            });
+            
+            dataOnly.addActionListener(e -> {
+                if (dataOnly.isSelected()) {
+                    videoOnly.setSelected(false);
+                    customOnly.setSelected(false);
+                }
+                customNameField.setEnabled(customOnly.isSelected());
+            });
+            
+            customOnly.addActionListener(e -> {
+                if (customOnly.isSelected()) {
+                    videoOnly.setSelected(false);
+                    dataOnly.setSelected(false);
+                }
+                customNameField.setEnabled(customOnly.isSelected());
+            });
+            
+            optionsPanel.add(smartRename);
+            optionsPanel.add(videoOnly);
+            optionsPanel.add(dataOnly);
+            optionsPanel.add(customOnly);
+            optionsPanel.add(new JLabel("Custom base name:"));
+            optionsPanel.add(customNameField);
+            
+            panel.add(optionsPanel, BorderLayout.SOUTH);
+            
+            // Show dialog
+            int result = JOptionPane.showConfirmDialog(this, 
+                panel, 
+                "Smart Renaming Analysis", 
+                JOptionPane.OK_CANCEL_OPTION, 
+                JOptionPane.PLAIN_MESSAGE);
+            
+            if (result == JOptionPane.OK_OPTION) {
+                // Execute the chosen renaming strategy
+                if (smartRename.isSelected()) {
+                    executeSmartRenaming(conversionCategories);
+                } else if (videoOnly.isSelected()) {
+                    executeVideoRenaming();
+                } else if (dataOnly.isSelected()) {
+                    executeDataRenaming();
+                } else if (customOnly.isSelected()) {
+                    executeCustomRenaming(customNameField.getText());
+                }
+            }
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this, 
+                "Error during smart renaming analysis: " + ex.getMessage(),
+                "Analysis Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private enum ConversionCategory {
+        VIDEO("Video Content"),
+        DATA("Data/Photo Content"), 
+        MIXED("Mixed Content");
+        
+        private final String description;
+        
+        ConversionCategory(String description) {
+            this.description = description;
+        }
+        
+        @Override
+        public String toString() {
+            return description;
+        }
+    }
+    
+    private Map<String, ConversionCategory> analyzeConversions() {
+        Map<String, ConversionCategory> categories = new HashMap<>();
+        
+        for (Conversion conversion : project.getConversions()) {
+            if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+                categories.put(conversion.name, ConversionCategory.DATA); // Default for empty
+                continue;
+            }
+            
+            boolean hasVideo = false;
+            boolean hasData = false;
+            
+            for (FileReference fileRef : conversion.linkedFiles) {
+                if (fileRef.exists()) {
+                    if (fileRef.getFile().isFile()) {
+                        String extension = getExtension(fileRef).toLowerCase();
+                        if (isVideoFile(extension)) {
+                            hasVideo = true;
+                        } else if (isDataFile(extension)) {
+                            hasData = true;
+                        }
+                    } else if (fileRef.getFile().isDirectory()) {
+                        // Analyze directory contents
+                        boolean[] dirResult = analyzeDirectory(fileRef.getFile());
+                        hasVideo = hasVideo || dirResult[0];
+                        hasData = hasData || dirResult[1];
+                    }
+                }
+            }
+            
+            // Categorize based on content
+            if (hasVideo && hasData) {
+                categories.put(conversion.name, ConversionCategory.MIXED);
+            } else if (hasVideo) {
+                categories.put(conversion.name, ConversionCategory.VIDEO);
+            } else {
+                categories.put(conversion.name, ConversionCategory.DATA);
+            }
+        }
+        
+        return categories;
+    }
+    
+    private boolean isDataFile(String extension) {
+        return Arrays.asList("jpg", "jpeg", "png", "gif", "bmp", "tiff", "pdf", "doc", "docx", "txt", "rtf").contains(extension);
+    }
+    
+        private boolean[] analyzeDirectory(File directory) {
+        boolean[] result = {false, false}; // [hasVideo, hasData]
+        try {
+            Files.walk(directory.toPath(), 3) // Limit depth for performance
+                .filter(Files::isRegularFile)
+                .forEach(file -> {
+                    String fileName = file.getFileName().toString();
+                    if (fileName.contains(".")) {
+                        String extension = fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase();
+                        if (isVideoFile(extension)) {
+                            result[0] = true;
+                        } else if (isDataFile(extension)) {
+                            result[1] = true;
+                        }
+                    }
+                });
+        } catch (IOException e) {
+            // Ignore directory access errors
+        }
+        return result;
+    }
+    
+    private String getRecommendation(ConversionCategory category, Conversion conversion) {
+        switch (category) {
+            case VIDEO:
+                return "Rename to: " + conversion.name + ".mp4 (after HandBrake)";
+            case DATA:
+                return "Rename to: " + (conversion.note.isEmpty() ? conversion.name : conversion.note);
+            case MIXED:
+                return "Rename to: " + conversion.name + "_Mixed";
+            default:
+                return "Use conversion name";
+        }
+    }
+    
+    private String getExportStatus(Conversion conversion) {
+        if (!conversion.hasBeenExported) {
+            return "[Not Exported]";
+        }
+        
+        String status = "[Exported: " + conversion.lastExportType;
+        if (conversion.lastExportTime != null) {
+            status += " - " + conversion.lastExportTime.format(java.time.format.DateTimeFormatter.ofPattern("MM/dd HH:mm"));
+        }
+        status += "]";
+        return status;
+    }
+    
+    private void executeSmartRenaming(Map<String, ConversionCategory> categories) {
+        // Group conversions by category
+        List<Conversion> videoConversions = new ArrayList<>();
+        List<Conversion> dataConversions = new ArrayList<>();
+        List<Conversion> mixedConversions = new ArrayList<>();
+        
+        for (Conversion conversion : project.getConversions()) {
+            ConversionCategory category = categories.get(conversion.name);
+            switch (category) {
+                case VIDEO: videoConversions.add(conversion); break;
+                case DATA: dataConversions.add(conversion); break;
+                case MIXED: mixedConversions.add(conversion); break;
+            }
+        }
+        
+        // Execute renaming for each category
+        if (!videoConversions.isEmpty()) {
+            executeVideoRenaming(videoConversions);
+        }
+        
+        if (!dataConversions.isEmpty()) {
+            executeDataRenaming(dataConversions);
+        }
+        
+        if (!mixedConversions.isEmpty()) {
+            executeMixedRenaming(mixedConversions);
+        }
+        
+        // Mark all conversions as exported
+        for (Conversion conversion : project.getConversions()) {
+            conversion.hasBeenExported = true;
+            conversion.lastExportTime = java.time.LocalDateTime.now();
+            conversion.lastExportType = "smart_rename";
+        }
+        saveProject();
+        
+        JOptionPane.showMessageDialog(this,
+            "Smart renaming completed!\n\n" +
+            "• Video conversions: " + videoConversions.size() + "\n" +
+            "• Data conversions: " + dataConversions.size() + "\n" +
+            "• Mixed conversions: " + mixedConversions.size() + "\n\n" +
+            "All conversions have been marked as exported.",
+            "Renaming Complete",
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+    
+    private void executeVideoRenaming() {
+        executeVideoRenaming(project.getConversions());
+    }
+    
+    private void executeVideoRenaming(List<Conversion> conversions) {
+        for (int i = 0; i < conversions.size(); i++) {
+            Conversion conversion = conversions.get(i);
+            String newName = (i + 1) + ".mp4";
+            updateLinkedFilesAfterRename(conversion, newName);
+        }
+    }
+    
+    private void executeDataRenaming() {
+        executeDataRenaming(project.getConversions());
+    }
+    
+    private void executeDataRenaming(List<Conversion> conversions) {
+        for (Conversion conversion : conversions) {
+            String newName = conversion.note.isEmpty() ? conversion.name : conversion.note;
+            updateLinkedFilesAfterRename(conversion, newName);
+        }
+    }
+    
+    private void executeCustomRenaming(String baseName) {
+        for (int i = 0; i < project.getConversions().size(); i++) {
+            Conversion conversion = project.getConversions().get(i);
+            String newName = baseName + "_" + (i + 1);
+            updateLinkedFilesAfterRename(conversion, newName);
+        }
+    }
+    
+    private void executeMixedRenaming(List<Conversion> conversions) {
+        for (Conversion conversion : conversions) {
+            String newName = conversion.name + "_Mixed";
+            updateLinkedFilesAfterRename(conversion, newName);
+        }
     }
 }
