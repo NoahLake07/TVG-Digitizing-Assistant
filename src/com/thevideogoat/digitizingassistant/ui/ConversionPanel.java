@@ -2088,19 +2088,38 @@ public class ConversionPanel extends JPanel {
 
         java.util.List<File> matches = new java.util.ArrayList<>();
         java.util.function.Predicate<File> predicate = f -> {
-            String n = f.getName().toLowerCase();
-            boolean m = false;
+            if (f.isDirectory()) return false;
+            String lowerName = f.getName().toLowerCase();
+            if (lowerName.endsWith(".llc")) return false; // ignore LosslessCut project files
+
+            boolean matched = false;
+
+            // Exact match on note (base name equals conversion note), any extension
             if (byNote.isSelected() && conversion.note != null && !conversion.note.isBlank()) {
-                m |= n.contains(conversion.note.toLowerCase());
+                String base = lowerName;
+                int dot = base.lastIndexOf('.');
+                if (dot > 0) base = base.substring(0, dot);
+                matched |= base.equals(conversion.note.toLowerCase());
             }
-            if (byTitle.isSelected()) {
-                m |= n.contains(conversion.name.toLowerCase());
+
+            // Exact match on title with .mp4 extension
+            if (!matched && byTitle.isSelected()) {
+                String base = lowerName;
+                int dot = base.lastIndexOf('.');
+                String ext = "";
+                if (dot > 0) {
+                    ext = base.substring(dot);
+                    base = base.substring(0, dot);
+                }
+                matched |= base.equals(conversion.name.toLowerCase()) && ext.equals(".mp4");
             }
-            if (byTrimmed.isSelected()) {
-                String base = conversion.name.toLowerCase();
-                m |= n.startsWith(base + "_") && n.contains("trimmed");
+
+            // Trimmed match: title_... with "trimmed" somewhere
+            if (!matched && byTrimmed.isSelected()) {
+                String baseTitle = conversion.name.toLowerCase();
+                matched |= lowerName.startsWith(baseTitle + "_") && lowerName.contains("trimmed");
             }
-            return m;
+            return matched;
         };
 
         java.util.Deque<File> stack = new java.util.ArrayDeque<>();
@@ -2110,7 +2129,7 @@ public class ConversionPanel extends JPanel {
             File[] list = dir.listFiles();
             if (list == null) continue;
             for (File f : list) {
-                if (f.isDirectory()) stack.push(f);
+                if (f.isDirectory()) { stack.push(f); continue; }
                 if (predicate.test(f)) matches.add(f);
             }
         }
@@ -2119,6 +2138,31 @@ public class ConversionPanel extends JPanel {
             JOptionPane.showMessageDialog(this, "No matching files found.", "Relink", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
+
+        // Prioritize results: 1) note exact, 2) trimmed, 3) title exact mp4
+        java.util.function.ToIntFunction<File> rank = f -> {
+            String lowerName = f.getName().toLowerCase();
+            String base = lowerName;
+            int dot = base.lastIndexOf('.');
+            String ext = "";
+            if (dot > 0) { ext = base.substring(dot); base = base.substring(0, dot); }
+
+            // note exact
+            if (byNote.isSelected() && conversion.note != null && !conversion.note.isBlank()) {
+                if (base.equals(conversion.note.toLowerCase())) return 0;
+            }
+            // trimmed
+            if (byTrimmed.isSelected()) {
+                String baseTitle = conversion.name.toLowerCase();
+                if (lowerName.startsWith(baseTitle + "_") && lowerName.contains("trimmed")) return 1;
+            }
+            // title exact mp4
+            if (byTitle.isSelected()) {
+                if (base.equals(conversion.name.toLowerCase()) && ext.equals(".mp4")) return 2;
+            }
+            return 3;
+        };
+        matches.sort(java.util.Comparator.comparingInt(rank).thenComparing(File::getName));
 
         JList<File> list = new JList<>(matches.toArray(new File[0]));
         list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
