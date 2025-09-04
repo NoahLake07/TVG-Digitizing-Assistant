@@ -1,6 +1,7 @@
 package com.thevideogoat.digitizingassistant.util;
 
 import com.thevideogoat.digitizingassistant.data.Conversion;
+import com.thevideogoat.digitizingassistant.data.ConversionStatus;
 import com.thevideogoat.digitizingassistant.data.FileReference;
 import com.thevideogoat.digitizingassistant.data.Project;
 import com.google.gson.GsonBuilder;
@@ -40,6 +41,12 @@ public class ExportUtil {
         try {
             String baseFileName = project.getName() + "_digitizing_sheet";
             
+            // For client version, always generate HTML
+            if (exportType == ExportType.CLIENT) {
+                String htmlFileName = project.getName() + "_digitizing_sheet_client_return_sheet.html";
+                exportDigitizingSheetHTML(project, outputPath.resolve(htmlFileName), exportType);
+            }
+            
             if (includeCSV) {
                 exportDigitizingSheetCSV(project, outputPath.resolve(baseFileName + ".csv"), exportType);
             }
@@ -65,20 +72,36 @@ public class ExportUtil {
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputPath.toFile()))) {
             // Write header
             if (exportType == ExportType.CLIENT) {
-                writer.println("Tape Name,Type,Status,Notes,Date of Conversion");
+                // Client paper sheet format
+                writer.println("Conversion Note,#,Type,Status,Technician Notes,Logs");
             } else {
                 writer.println("Tape Name,Type,Status,Notes,Technician Notes,Duration,Date of Conversion,Time of Conversion,Damage History");
             }
             
             // Write data
+            int index = 1;
             for (Conversion conversion : project.getConversions()) {
                 if (exportType == ExportType.CLIENT) {
-                    writer.printf("\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"\n",
-                        escapeCSV(conversion.name),
+                    // Client paper sheet columns: Conversion Note | # | Type | Status | Technician Notes | Logs
+                    String technicianNotes = (conversion.technicianNotes != null && !conversion.technicianNotes.trim().isEmpty())
+                        ? conversion.technicianNotes : "-";
+
+                    String logs = "-";
+                    if (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) {
+                        List<String> damageEvents = new ArrayList<>();
+                        for (Conversion.DamageEvent event : conversion.damageHistory) {
+                            damageEvents.add(event.description);
+                        }
+                        logs = String.join("; ", damageEvents);
+                    }
+
+                    writer.printf("\"%s\",%d,\"%s\",\"%s\",\"%s\",\"%s\"\n",
+                        escapeCSV(conversion.note != null ? conversion.note : ""),
+                        index,
                         escapeCSV(conversion.type.toString()),
                         escapeCSV(conversion.status.toString()),
-                        escapeCSV(conversion.note),
-                        escapeCSV(conversion.dateOfConversion.toString()));
+                        escapeCSV(technicianNotes),
+                        escapeCSV(logs));
                 } else {
                     // Include damage history for archival and technician versions
                     String damageHistory = "";
@@ -103,6 +126,7 @@ public class ExportUtil {
                         escapeCSV(conversion.timeOfConversion.toString()),
                         escapeCSV(damageHistory));
                 }
+                index++;
             }
         }
     }
@@ -116,15 +140,44 @@ public class ExportUtil {
         JsonArray conversionsArray = new JsonArray();
         for (Conversion conversion : project.getConversions()) {
             JsonObject conversionJson = new JsonObject();
-            conversionJson.addProperty("name", conversion.name);
-            conversionJson.addProperty("type", conversion.type.toString());
-            conversionJson.addProperty("status", conversion.status.toString());
-            conversionJson.addProperty("note", conversion.note);
-            conversionJson.addProperty("dateOfConversion", conversion.dateOfConversion.toString());
-            conversionJson.addProperty("timeOfConversion", conversion.timeOfConversion.toString());
-            conversionJson.addProperty("duration", formatDuration(conversion.duration));
             
-            if (exportType != ExportType.CLIENT) {
+            if (exportType == ExportType.CLIENT) {
+                // For client version, use conversion notes as primary label and include technician notes/damage logs
+                conversionJson.addProperty("conversionNotes", conversion.note);
+                conversionJson.addProperty("tapeName", conversion.name);
+                conversionJson.addProperty("type", conversion.type.toString());
+                conversionJson.addProperty("status", conversion.status.toString());
+                conversionJson.addProperty("dateOfConversion", conversion.dateOfConversion.toString());
+                
+                // Include technician notes for irreversible damage
+                if (conversion.status == ConversionStatus.DAMAGE_IRREVERSIBLE && 
+                    conversion.technicianNotes != null && !conversion.technicianNotes.trim().isEmpty()) {
+                    conversionJson.addProperty("technicianNotes", conversion.technicianNotes);
+                }
+                
+                // Include damage history for client version
+                if (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) {
+                    JsonArray damageArray = new JsonArray();
+                    for (Conversion.DamageEvent event : conversion.damageHistory) {
+                        JsonObject damageJson = new JsonObject();
+                        damageJson.addProperty("timestamp", event.timestamp.toString());
+                        damageJson.addProperty("description", event.description);
+                        if (event.technicianNotes != null && !event.technicianNotes.trim().isEmpty()) {
+                            damageJson.addProperty("technicianNotes", event.technicianNotes);
+                        }
+                        damageArray.add(damageJson);
+                    }
+                    conversionJson.add("damageHistory", damageArray);
+                }
+            } else {
+                // For archival and technician versions, use original structure
+                conversionJson.addProperty("name", conversion.name);
+                conversionJson.addProperty("type", conversion.type.toString());
+                conversionJson.addProperty("status", conversion.status.toString());
+                conversionJson.addProperty("note", conversion.note);
+                conversionJson.addProperty("dateOfConversion", conversion.dateOfConversion.toString());
+                conversionJson.addProperty("timeOfConversion", conversion.timeOfConversion.toString());
+                conversionJson.addProperty("duration", formatDuration(conversion.duration));
                 conversionJson.addProperty("technicianNotes", conversion.technicianNotes);
                 conversionJson.addProperty("isDataOnly", conversion.isDataOnly);
                 
@@ -167,37 +220,168 @@ public class ExportUtil {
     
     public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums, int maxDepth) {
         try {
-            JsonObject fileMapJson = new JsonObject();
-            fileMapJson.addProperty("projectName", project.getName());
-            fileMapJson.addProperty("exportDate", java.time.LocalDateTime.now().toString());
-            fileMapJson.addProperty("includeChecksums", includeChecksums);
+            // Pre-validation: Check for potential issues
+            List<String> validationErrors = new ArrayList<>();
+            List<String> validationWarnings = new ArrayList<>();
             
-            JsonArray filesArray = new JsonArray();
+            // Check if project has conversions
+            if (project.getConversions().isEmpty()) {
+                validationErrors.add("No conversions found in project");
+            }
             
+            // Check for conversions with linked files
+            int conversionsWithFiles = 0;
+            int totalFiles = 0;
+            for (Conversion conversion : project.getConversions()) {
+                if (conversion.linkedFiles != null && !conversion.linkedFiles.isEmpty()) {
+                    conversionsWithFiles++;
+                    totalFiles += conversion.linkedFiles.size();
+                }
+            }
+            
+            if (conversionsWithFiles == 0) {
+                validationWarnings.add("No conversions have linked files");
+            }
+            
+            // Check for potentially problematic paths
             for (Conversion conversion : project.getConversions()) {
                 if (conversion.linkedFiles != null) {
-                    for (var fileRef : conversion.linkedFiles) {
-                        // Process the linked file/directory
-                        processFileOrDirectory(fileRef, conversion, filesArray, includeChecksums, maxDepth);
+                    for (FileReference fileRef : conversion.linkedFiles) {
+                        try {
+                            java.nio.file.Path path = Paths.get(fileRef.getPath());
+                            if (Files.exists(path) && Files.isDirectory(path)) {
+                                // Check if directory is accessible
+                                try {
+                                    Files.list(path).limit(1).count(); // Test directory access
+                                } catch (Exception e) {
+                                    validationWarnings.add("Directory not accessible: " + fileRef.getPath() + " (" + e.getMessage() + ")");
+                                }
+                            }
+                        } catch (Exception e) {
+                            validationWarnings.add("Invalid path: " + fileRef.getPath() + " (" + e.getMessage() + ")");
+                        }
                     }
                 }
             }
             
-            fileMapJson.add("files", filesArray);
-            
-            // Save as JSON
-            try (FileWriter writer = new FileWriter(outputPath.toFile())) {
-                new GsonBuilder().setPrettyPrinting().create().toJson(fileMapJson, writer);
+            // Show validation results
+            if (!validationErrors.isEmpty() || !validationWarnings.isEmpty()) {
+                StringBuilder message = new StringBuilder();
+                if (!validationErrors.isEmpty()) {
+                    message.append("Errors found:\n");
+                    for (String error : validationErrors) {
+                        message.append("• ").append(error).append("\n");
+                    }
+                    message.append("\n");
+                }
+                if (!validationWarnings.isEmpty()) {
+                    message.append("Warnings:\n");
+                    for (String warning : validationWarnings) {
+                        message.append("• ").append(warning).append("\n");
+                    }
+                    message.append("\n");
+                }
+                message.append("Found ").append(conversionsWithFiles).append(" conversions with ").append(totalFiles).append(" total linked files.\n\n");
+                message.append("Do you want to continue with the export?");
+                
+                int result = JOptionPane.showConfirmDialog(null, 
+                    message.toString(),
+                    "File Map Export Validation", 
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+                
+                if (result != JOptionPane.YES_OPTION) {
+                    return;
+                }
             }
             
-            JOptionPane.showMessageDialog(null, 
-                "File map exported successfully to:\n" + outputPath.toString(),
-                "Export Complete", 
-                JOptionPane.INFORMATION_MESSAGE);
+            // Show progress dialog
+            JDialog progressDialog = new JDialog((java.awt.Frame) null, "Exporting File Map", true);
+            progressDialog.setSize(400, 150);
+            progressDialog.setLocationRelativeTo(null);
+            progressDialog.setResizable(false);
+            
+            JPanel panel = new JPanel(new java.awt.BorderLayout(10, 10));
+            panel.setBorder(javax.swing.BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            
+            JLabel statusLabel = new JLabel("Preparing file map export...");
+            JProgressBar progressBar = new JProgressBar();
+            progressBar.setIndeterminate(true);
+            
+            panel.add(statusLabel, java.awt.BorderLayout.NORTH);
+            panel.add(progressBar, java.awt.BorderLayout.CENTER);
+            
+            progressDialog.add(panel);
+            
+            // Start export in background thread
+            Thread exportThread = new Thread(() -> {
+                try {
+                    JsonObject fileMapJson = new JsonObject();
+                    fileMapJson.addProperty("projectName", project.getName());
+                    fileMapJson.addProperty("exportDate", java.time.LocalDateTime.now().toString());
+                    fileMapJson.addProperty("includeChecksums", includeChecksums);
+                    
+                    JsonArray filesArray = new JsonArray();
+                    
+                    int totalConversions = project.getConversions().size();
+                    int processedConversions = 0;
+                    
+                    for (Conversion conversion : project.getConversions()) {
+                        // Update progress
+                        final int current = processedConversions;
+                        SwingUtilities.invokeLater(() -> {
+                            statusLabel.setText("Processing conversion " + (current + 1) + " of " + totalConversions + ": " + conversion.name);
+                        });
+                        
+                        if (conversion.linkedFiles != null) {
+                            for (var fileRef : conversion.linkedFiles) {
+                                // Process the linked file/directory
+                                processFileOrDirectory(fileRef, conversion, filesArray, includeChecksums, maxDepth);
+                            }
+                        }
+                        
+                        processedConversions++;
+                    }
+                    
+                    // Update final status
+                    SwingUtilities.invokeLater(() -> {
+                        statusLabel.setText("Saving file map...");
+                    });
+                    
+                    fileMapJson.add("files", filesArray);
+                    
+                    // Save as JSON
+                    try (FileWriter writer = new FileWriter(outputPath.toFile())) {
+                        new GsonBuilder().setPrettyPrinting().create().toJson(fileMapJson, writer);
+                    }
+                    
+                    // Close progress dialog and show success
+                    SwingUtilities.invokeLater(() -> {
+                        progressDialog.dispose();
+                        JOptionPane.showMessageDialog(null, 
+                            "File map exported successfully to:\n" + outputPath.toString(),
+                            "Export Complete", 
+                            JOptionPane.INFORMATION_MESSAGE);
+                    });
+                    
+                } catch (Exception e) {
+                    // Close progress dialog and show error
+                    SwingUtilities.invokeLater(() -> {
+                        progressDialog.dispose();
+                        JOptionPane.showMessageDialog(null, 
+                            "Error exporting file map: " + e.getMessage(),
+                            "Export Error", 
+                            JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            });
+            
+            exportThread.start();
+            progressDialog.setVisible(true);
                 
         } catch (Exception e) {
             JOptionPane.showMessageDialog(null, 
-                "Error exporting file map: " + e.getMessage(),
+                "Error starting file map export: " + e.getMessage(),
                 "Export Error", 
                 JOptionPane.ERROR_MESSAGE);
         }
@@ -225,6 +409,10 @@ public class ExportUtil {
                 filesArray.add(fileJson);
             }
         } catch (Exception e) {
+            // Log the error for debugging
+            System.err.println("Error processing file/directory for conversion " + conversion.name + ": " + e.getMessage());
+            e.printStackTrace();
+            
             JsonObject fileJson = new JsonObject();
             fileJson.addProperty("tapeName", conversion.name);
             fileJson.addProperty("filePath", fileRef.getPath());
@@ -236,9 +424,42 @@ public class ExportUtil {
     
     private static void exploreDirectory(java.nio.file.Path dirPath, Conversion conversion, JsonArray filesArray, boolean includeChecksums, int maxDepth) {
         try {
-            Files.walk(dirPath, maxDepth)
-                .filter(Files::isRegularFile) // Only include regular files, not directories
-                .forEach(filePath -> addFileToArray(filePath, conversion, filesArray, includeChecksums));
+            // Use a more robust approach with timeout protection
+            List<java.nio.file.Path> files = new ArrayList<>();
+            
+            // Collect files with timeout protection
+            try {
+                Files.walk(dirPath, maxDepth)
+                    .filter(Files::isRegularFile)
+                    .limit(10000) // Limit to prevent infinite loops
+                    .forEach(files::add);
+            } catch (Exception e) {
+                // If Files.walk fails, try a simpler approach
+                try {
+                    Files.list(dirPath)
+                        .filter(Files::isRegularFile)
+                        .limit(1000)
+                        .forEach(files::add);
+                } catch (Exception e2) {
+                    throw new IOException("Could not list directory contents: " + e2.getMessage());
+                }
+            }
+            
+            // Process collected files
+            for (java.nio.file.Path filePath : files) {
+                addFileToArray(filePath, conversion, filesArray, includeChecksums);
+            }
+            
+            // Add a summary entry for the directory
+            JsonObject dirJson = new JsonObject();
+            dirJson.addProperty("tapeName", conversion.name);
+            dirJson.addProperty("filePath", dirPath.toString());
+            dirJson.addProperty("conversionStatus", conversion.status.toString());
+            dirJson.addProperty("type", "directory");
+            dirJson.addProperty("fileCount", files.size());
+            dirJson.addProperty("note", "Directory contains " + files.size() + " files");
+            filesArray.add(dirJson);
+            
         } catch (Exception e) {
             JsonObject fileJson = new JsonObject();
             fileJson.addProperty("tapeName", conversion.name);
@@ -308,5 +529,353 @@ public class ExportUtil {
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IOException("MD5 algorithm not available", e);
         }
+    }
+    
+    private static void exportDigitizingSheetHTML(Project project, Path outputPath, ExportType exportType) throws IOException {
+        try (PrintWriter writer = new PrintWriter(new FileWriter(outputPath.toFile()))) {
+            // Write HTML header with modern styling
+            writer.println("<!DOCTYPE html>");
+            writer.println("<html lang=\"en\">");
+            writer.println("<head>");
+            writer.println("    <meta charset=\"UTF-8\">");
+            writer.println("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+            writer.println("    <title>Media Return Sheet - " + escapeHTML(project.getName()) + "</title>");
+            writer.println("    <style>");
+            writer.println("        body {");
+            writer.println("            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;");
+            writer.println("            line-height: 1.6;");
+            writer.println("            color: #333;");
+            writer.println("            max-width: 1200px;");
+            writer.println("            margin: 0 auto;");
+            writer.println("            padding: 20px;");
+            writer.println("            background-color: #f9f9f9;");
+            writer.println("        }");
+            writer.println("        .header {");
+            writer.println("            text-align: center;");
+            writer.println("            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);");
+            writer.println("            color: white;");
+            writer.println("            padding: 30px;");
+            writer.println("            border-radius: 10px;");
+            writer.println("            margin-bottom: 30px;");
+            writer.println("            box-shadow: 0 4px 6px rgba(0,0,0,0.1);");
+            writer.println("        }");
+            writer.println("        .header h1 {");
+            writer.println("            margin: 0;");
+            writer.println("            font-size: 2.5em;");
+            writer.println("            font-weight: 300;");
+            writer.println("        }");
+            writer.println("        .header p {");
+            writer.println("            margin: 10px 0 0 0;");
+            writer.println("            font-size: 1.2em;");
+            writer.println("            opacity: 0.9;");
+            writer.println("        }");
+            writer.println("        .summary {");
+            writer.println("            background: white;");
+            writer.println("            padding: 20px;");
+            writer.println("            border-radius: 8px;");
+            writer.println("            margin-bottom: 30px;");
+            writer.println("            box-shadow: 0 2px 4px rgba(0,0,0,0.1);");
+            writer.println("        }");
+            writer.println("        .summary-grid {");
+            writer.println("            display: grid;");
+            writer.println("            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));");
+            writer.println("            gap: 20px;");
+            writer.println("            margin-top: 15px;");
+            writer.println("        }");
+            writer.println("        .summary-item {");
+            writer.println("            text-align: center;");
+            writer.println("            padding: 15px;");
+            writer.println("            background: #f8f9fa;");
+            writer.println("            border-radius: 6px;");
+            writer.println("            border-left: 4px solid #667eea;");
+            writer.println("        }");
+            writer.println("        .summary-number {");
+            writer.println("            font-size: 2em;");
+            writer.println("            font-weight: bold;");
+            writer.println("            color: #667eea;");
+            writer.println("        }");
+            writer.println("        .summary-label {");
+            writer.println("            color: #666;");
+            writer.println("            font-size: 0.9em;");
+            writer.println("            text-transform: uppercase;");
+            writer.println("            letter-spacing: 1px;");
+            writer.println("        }");
+            writer.println("        .conversions {");
+            writer.println("            background: white;");
+            writer.println("            border-radius: 8px;");
+            writer.println("            overflow: hidden;");
+            writer.println("            box-shadow: 0 2px 4px rgba(0,0,0,0.1);");
+            writer.println("        }");
+            writer.println("        .conversion-item {");
+            writer.println("            border-bottom: 1px solid #eee;");
+            writer.println("            padding: 20px;");
+            writer.println("        }");
+            writer.println("        .conversion-item:last-child {");
+            writer.println("            border-bottom: none;");
+            writer.println("        }");
+            writer.println("        .conversion-header {");
+            writer.println("            display: flex;");
+            writer.println("            justify-content: space-between;");
+            writer.println("            align-items: center;");
+            writer.println("            margin-bottom: 15px;");
+            writer.println("        }");
+            writer.println("        .tape-name {");
+            writer.println("            font-size: 1.4em;");
+            writer.println("            font-weight: bold;");
+            writer.println("            color: #2c3e50;");
+            writer.println("        }");
+            writer.println("        .status-badge {");
+            writer.println("            padding: 6px 12px;");
+            writer.println("            border-radius: 20px;");
+            writer.println("            font-size: 0.85em;");
+            writer.println("            font-weight: bold;");
+            writer.println("            text-transform: uppercase;");
+            writer.println("            letter-spacing: 1px;");
+            writer.println("        }");
+            writer.println("        .status-not-started { background: #6c757d; color: white; }");
+            writer.println("        .status-in-progress { background: #fd7e14; color: white; }");
+            writer.println("        .status-basic-editing { background: #007bff; color: white; }");
+            writer.println("        .status-completed { background: #28a745; color: white; }");
+            writer.println("        .status-damaged { background: #dc3545; color: white; }");
+            writer.println("        .status-damage-fixed { background: #ffc107; color: #212529; }");
+            writer.println("        .status-damage-irreversible { background: #6f42c1; color: white; }");
+            writer.println("        .conversion-details {");
+            writer.println("            display: grid;");
+            writer.println("            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));");
+            writer.println("            gap: 15px;");
+            writer.println("        }");
+            writer.println("        .detail-group {");
+            writer.println("            background: #f8f9fa;");
+            writer.println("            padding: 15px;");
+            writer.println("            border-radius: 6px;");
+            writer.println("        }");
+            writer.println("        .detail-label {");
+            writer.println("            font-weight: bold;");
+            writer.println("            color: #495057;");
+            writer.println("            margin-bottom: 5px;");
+            writer.println("            font-size: 0.9em;");
+            writer.println("            text-transform: uppercase;");
+            writer.println("            letter-spacing: 0.5px;");
+            writer.println("        }");
+            writer.println("        .detail-value {");
+            writer.println("            color: #212529;");
+            writer.println("            font-size: 1em;");
+            writer.println("        }");
+            writer.println("        .damage-section {");
+            writer.println("            background: #fff3cd;");
+            writer.println("            border: 1px solid #ffeaa7;");
+            writer.println("            border-radius: 6px;");
+            writer.println("            padding: 15px;");
+            writer.println("            margin-top: 15px;");
+            writer.println("        }");
+            writer.println("        .damage-section h4 {");
+            writer.println("            margin: 0 0 10px 0;");
+            writer.println("            color: #856404;");
+            writer.println("            font-size: 1.1em;");
+            writer.println("        }");
+            writer.println("        .damage-event {");
+            writer.println("            background: white;");
+            writer.println("            padding: 10px;");
+            writer.println("            border-radius: 4px;");
+            writer.println("            margin-bottom: 10px;");
+            writer.println("            border-left: 3px solid #ffc107;");
+            writer.println("        }");
+            writer.println("        .damage-timestamp {");
+            writer.println("            font-size: 0.85em;");
+            writer.println("            color: #6c757d;");
+            writer.println("            margin-bottom: 5px;");
+            writer.println("        }");
+            writer.println("        .damage-description {");
+            writer.println("            font-weight: bold;");
+            writer.println("            color: #856404;");
+            writer.println("            margin-bottom: 5px;");
+            writer.println("        }");
+            writer.println("        .damage-notes {");
+            writer.println("            color: #495057;");
+            writer.println("            font-style: italic;");
+            writer.println("        }");
+            writer.println("        .footer {");
+            writer.println("            text-align: center;");
+            writer.println("            margin-top: 40px;");
+            writer.println("            padding: 20px;");
+            writer.println("            color: #6c757d;");
+            writer.println("            font-size: 0.9em;");
+            writer.println("        }");
+            writer.println("        @media print {");
+            writer.println("            body { background: white; }");
+            writer.println("            .header { background: #667eea !important; -webkit-print-color-adjust: exact; }");
+            writer.println("            .conversion-item { page-break-inside: avoid; }");
+            writer.println("        }");
+            writer.println("    </style>");
+            writer.println("</head>");
+            writer.println("<body>");
+            
+            // Header
+            writer.println("    <div class=\"header\">");
+            writer.println("        <h1>Media Return Sheet</h1>");
+            writer.println("        <p>Project: " + escapeHTML(project.getName()) + "</p>");
+            writer.println("        <p>Generated: " + java.time.LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMMM dd, yyyy 'at' h:mm a")) + "</p>");
+            writer.println("    </div>");
+            
+            // Summary section
+            writer.println("    <div class=\"summary\">");
+            writer.println("        <h2>Project Summary</h2>");
+            writer.println("        <div class=\"summary-grid\">");
+            
+            int totalConversions = project.getConversions().size();
+            int completedConversions = 0;
+            int damagedConversions = 0;
+            int irreversibleDamage = 0;
+            
+            for (Conversion conversion : project.getConversions()) {
+                if (conversion.status == ConversionStatus.COMPLETED) {
+                    completedConversions++;
+                }
+                if (conversion.status == ConversionStatus.DAMAGED || 
+                    conversion.status == ConversionStatus.DAMAGE_FIXED || 
+                    conversion.status == ConversionStatus.DAMAGE_IRREVERSIBLE) {
+                    damagedConversions++;
+                }
+                if (conversion.status == ConversionStatus.DAMAGE_IRREVERSIBLE) {
+                    irreversibleDamage++;
+                }
+            }
+            
+            writer.println("            <div class=\"summary-item\">");
+            writer.println("                <div class=\"summary-number\">" + totalConversions + "</div>");
+            writer.println("                <div class=\"summary-label\">Total Media Items</div>");
+            writer.println("            </div>");
+            writer.println("            <div class=\"summary-item\">");
+            writer.println("                <div class=\"summary-number\">" + completedConversions + "</div>");
+            writer.println("                <div class=\"summary-label\">Successfully Converted</div>");
+            writer.println("            </div>");
+            writer.println("            <div class=\"summary-item\">");
+            writer.println("                <div class=\"summary-number\">" + damagedConversions + "</div>");
+            writer.println("                <div class=\"summary-label\">Items with Damage</div>");
+            writer.println("            </div>");
+            if (irreversibleDamage > 0) {
+                writer.println("            <div class=\"summary-item\">");
+                writer.println("                <div class=\"summary-number\">" + irreversibleDamage + "</div>");
+                writer.println("                <div class=\"summary-label\">Irreversible Damage</div>");
+                writer.println("            </div>");
+            }
+            writer.println("        </div>");
+            writer.println("    </div>");
+            
+            // Conversions section
+            writer.println("    <div class=\"conversions\">");
+            writer.println("        <h2 style=\"margin: 0; padding: 20px 20px 0 20px; color: #2c3e50;\">Media Items</h2>");
+            
+            for (Conversion conversion : project.getConversions()) {
+                writer.println("        <div class=\"conversion-item\">");
+                
+                // Header with tape name and status
+                writer.println("            <div class=\"conversion-header\">");
+                writer.println("                <div class=\"tape-name\">" + escapeHTML(conversion.name) + "</div>");
+                writer.println("                <div class=\"status-badge status-" + getStatusClass(conversion.status) + "\">" + 
+                    escapeHTML(conversion.status.toString()) + "</div>");
+                writer.println("            </div>");
+                
+                // Conversion details
+                writer.println("            <div class=\"conversion-details\">");
+                
+                // Basic info
+                writer.println("                <div class=\"detail-group\">");
+                writer.println("                    <div class=\"detail-label\">Media Type</div>");
+                writer.println("                    <div class=\"detail-value\">" + escapeHTML(conversion.type.toString()) + "</div>");
+                writer.println("                </div>");
+                
+                writer.println("                <div class=\"detail-group\">");
+                writer.println("                    <div class=\"detail-label\">Date of Conversion</div>");
+                writer.println("                    <div class=\"detail-value\">" + escapeHTML(conversion.dateOfConversion.toString()) + "</div>");
+                writer.println("                </div>");
+                
+                if (conversion.timeOfConversion != null) {
+                    writer.println("                <div class=\"detail-group\">");
+                    writer.println("                    <div class=\"detail-label\">Time of Conversion</div>");
+                    writer.println("                    <div class=\"detail-value\">" + escapeHTML(conversion.timeOfConversion.toString()) + "</div>");
+                    writer.println("                </div>");
+                }
+                
+                if (conversion.duration != null && !conversion.duration.isZero()) {
+                    writer.println("                <div class=\"detail-group\">");
+                    writer.println("                    <div class=\"detail-label\">Duration</div>");
+                    writer.println("                    <div class=\"detail-value\">" + formatDuration(conversion.duration) + "</div>");
+                    writer.println("                </div>");
+                }
+                
+                if (conversion.note != null && !conversion.note.trim().isEmpty()) {
+                    writer.println("                <div class=\"detail-group\">");
+                    writer.println("                    <div class=\"detail-label\">Client Notes</div>");
+                    writer.println("                    <div class=\"detail-value\">" + escapeHTML(conversion.note) + "</div>");
+                    writer.println("                </div>");
+                }
+                
+                // Show technician notes for irreversible damage
+                if (conversion.status == ConversionStatus.DAMAGE_IRREVERSIBLE && 
+                    conversion.technicianNotes != null && !conversion.technicianNotes.trim().isEmpty()) {
+                    writer.println("                <div class=\"detail-group\">");
+                    writer.println("                    <div class=\"detail-label\">Technician Notes</div>");
+                    writer.println("                    <div class=\"detail-value\">" + escapeHTML(conversion.technicianNotes) + "</div>");
+                    writer.println("                </div>");
+                }
+                
+                writer.println("            </div>");
+                
+                // Damage history section (if any damage events exist)
+                if (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) {
+                    writer.println("            <div class=\"damage-section\">");
+                    writer.println("                <h4>Damage History</h4>");
+                    
+                    for (Conversion.DamageEvent event : conversion.damageHistory) {
+                        writer.println("                <div class=\"damage-event\">");
+                        writer.println("                    <div class=\"damage-timestamp\">" + 
+                            event.timestamp.format(DateTimeFormatter.ofPattern("MMM dd, yyyy 'at' h:mm a")) + "</div>");
+                        writer.println("                    <div class=\"damage-description\">" + escapeHTML(event.description) + "</div>");
+                        if (event.technicianNotes != null && !event.technicianNotes.trim().isEmpty()) {
+                            writer.println("                    <div class=\"damage-notes\">" + escapeHTML(event.technicianNotes) + "</div>");
+                        }
+                        writer.println("                </div>");
+                    }
+                    
+                    writer.println("            </div>");
+                }
+                
+                writer.println("        </div>");
+            }
+            
+            writer.println("    </div>");
+            
+            // Footer
+            writer.println("    <div class=\"footer\">");
+            writer.println("        <p>This report was generated automatically by the Digitizing Assistant system.</p>");
+            writer.println("        <p>For questions about your media conversion, please contact our support team.</p>");
+            writer.println("    </div>");
+            
+            writer.println("</body>");
+            writer.println("</html>");
+        }
+    }
+    
+    private static String getStatusClass(ConversionStatus status) {
+        switch (status) {
+            case NOT_STARTED: return "not-started";
+            case IN_PROGRESS: return "in-progress";
+            case BASIC_EDITING: return "basic-editing";
+            case COMPLETED: return "completed";
+            case DAMAGED: return "damaged";
+            case DAMAGE_FIXED: return "damage-fixed";
+            case DAMAGE_IRREVERSIBLE: return "damage-irreversible";
+            default: return "not-started";
+        }
+    }
+    
+    private static String escapeHTML(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                  .replace("<", "&lt;")
+                  .replace(">", "&gt;")
+                  .replace("\"", "&quot;")
+                  .replace("'", "&#39;");
     }
 }

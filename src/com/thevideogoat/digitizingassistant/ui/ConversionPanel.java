@@ -8,11 +8,11 @@ import com.thevideogoat.digitizingassistant.data.Preferences;
 
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
-import javax.swing.border.Border;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -26,11 +26,9 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNullElse;
 import com.thevideogoat.digitizingassistant.data.FileReference;
-import com.thevideogoat.digitizingassistant.util.FileCacheManager;
 
 public class ConversionPanel extends JPanel {
 
@@ -68,7 +66,7 @@ public class ConversionPanel extends JPanel {
         headerRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
         headerRow.setBackground(Theme.BACKGROUND);
         header = new JLabel(conversion.name);
-        header.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 24));
+        header.setFont(new Font(Theme.HEADER_FONT.getFamily(), Font.BOLD, 18));
         header.setForeground(Theme.TEXT);
         headerRow.add(header);
 
@@ -80,6 +78,9 @@ public class ConversionPanel extends JPanel {
             if(newName != null){
                 conversion.name = newName;
                 header.setText(newName);
+                // Keep the selection on this conversion after list refresh
+                projectFrame.refreshConversionListAndReselect(conversion);
+                projectFrame.markUnsavedChanges();
             }
         });
         renameMenu.add(renameMenuItem);
@@ -102,7 +103,7 @@ public class ConversionPanel extends JPanel {
         typeSelector = new JComboBox<>(Type.values());
         if (conversion.type != null) typeSelector.setSelectedItem(conversion.type);
         typeSelector.setPreferredSize(new Dimension(150, 30));
-        typeSelector.setFont(Theme.NORMAL_FONT.deriveFont(18f));
+        typeSelector.setFont(Theme.NORMAL_FONT.deriveFont(14f));
         typeRow.add(type);
         typeRow.add(Box.createHorizontalStrut(10));
         typeRow.add(typeSelector);
@@ -118,7 +119,7 @@ public class ConversionPanel extends JPanel {
         noteField = new JTextField(conversion.note);
         noteField.setPreferredSize(new Dimension(400, 30));
         Theme.styleTextField(noteField);
-        noteField.setFont(Theme.NORMAL_FONT.deriveFont(14f));
+        noteField.setFont(Theme.NORMAL_FONT);
         
         noteRow.add(note);
         noteRow.add(Box.createHorizontalStrut(10));
@@ -152,7 +153,7 @@ public class ConversionPanel extends JPanel {
         technicianNotesField = new JTextField(conversion.technicianNotes);
         technicianNotesField.setPreferredSize(new Dimension(400, 30));
         Theme.styleTextField(technicianNotesField);
-        technicianNotesField.setFont(Theme.NORMAL_FONT.deriveFont(14f));
+        technicianNotesField.setFont(Theme.NORMAL_FONT);
         technicianNotesField.getDocument().addDocumentListener(new DocumentListener() {
             public void changedUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
             public void removeUpdate(DocumentEvent e) { projectFrame.markUnsavedChanges(); }
@@ -455,102 +456,12 @@ public class ConversionPanel extends JPanel {
         // Rename Options button
         JButton renameOptionsBtn = new JButton("Rename Options");
         Theme.styleButton(renameOptionsBtn);
-        renameOptionsBtn.addActionListener(e -> {
-            if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
-                JOptionPane.showMessageDialog(this,
-                    "No files are linked to rename.",
-                    "No Files",
-                    JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+        renameOptionsBtn.addActionListener(e -> showAdvancedRenameDialog());
 
-            String[] options = {
-                "Rename to conversion name",
-                "Rename to conversion note",
-                "Custom name...",
-                "Cancel"
-            };
-            
-            // Create checkbox for subdirectories
-            JCheckBox includeSubdirs = new JCheckBox("Include files in subdirectories", false);
-            includeSubdirs.setToolTipText("If checked, files in subdirectories will also be renamed.");
-            
-            // Create preserve numbering checkbox
-            JCheckBox preserveNumbering = new JCheckBox("Preserve existing numbering", false);
-            preserveNumbering.setToolTipText("If checked, will try to maintain any existing numbers in filenames.");
-            
-            // Create custom dialog
-            JPanel dialogPanel = new JPanel();
-            dialogPanel.setLayout(new BoxLayout(dialogPanel, BoxLayout.Y_AXIS));
-            dialogPanel.add(new JLabel("Select rename option:"));
-            dialogPanel.add(Box.createVerticalStrut(10));
-            dialogPanel.add(includeSubdirs);
-            dialogPanel.add(Box.createVerticalStrut(5));
-            dialogPanel.add(preserveNumbering);
-            
-            int choice = JOptionPane.showOptionDialog(
-                this,
-                dialogPanel,
-                "Rename Options",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                options,
-                options[0]
-            );
-            
-            String newName = null;
-            switch (choice) {
-                case 0: // Conversion name
-                    newName = conversion.name;
-                    break;
-                case 1: // Conversion note
-                    if (conversion.note.isEmpty()) {
-                        JOptionPane.showMessageDialog(this, 
-                            "Conversion note is empty. Please add a note first.", 
-                            "Warning", 
-                            JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                    newName = conversion.note;
-                    break;
-                case 2: // Custom name
-                    newName = JOptionPane.showInputDialog(this,
-                        "Enter custom name:",
-                        "Custom Filename",
-                        JOptionPane.PLAIN_MESSAGE);
-                    if (newName == null || newName.trim().isEmpty()) {
-                        return;
-                    }
-                    break;
-                default:
-                    return;
-            }
-            
-            // Confirm rename operation
-            int confirm = JOptionPane.showConfirmDialog(this,
-                String.format("Rename %d file(s) to \"%s\"?", 
-                    conversion.linkedFiles.size(), newName),
-                "Confirm Rename",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-            
-            if (confirm == JOptionPane.YES_OPTION) {
-                // Convert FileReferences to Files for the rename operation
-                ArrayList<File> filesToRename = new ArrayList<>();
-                for (FileReference fileRef : conversion.linkedFiles) {
-                    filesToRename.add(fileRef.getFile());
-                }
-                
-                Util.renameFilesWithOptions(
-                    filesToRename, 
-                    newName,
-                    includeSubdirs.isSelected(),
-                    preserveNumbering.isSelected()
-                );
-                updateLinkedFiles();
-            }
-        });
+        // Quick Rename to Note button
+        JButton renameToNoteBtn = new JButton("Rename to Note");
+        Theme.styleButton(renameToNoteBtn);
+        renameToNoteBtn.addActionListener(e -> quickRenameToNote());
 
         addFileBtn = new JButton("Attach File");
         Theme.styleButton(addFileBtn);
@@ -560,6 +471,8 @@ public class ConversionPanel extends JPanel {
         Theme.styleButton(showFileMapBtn);
         showFileMapBtn.addActionListener(e -> showFileMapDialog());
 
+        filesButtonRow.add(renameToNoteBtn);
+        filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(renameOptionsBtn);
         filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(showFileMapBtn);
@@ -654,12 +567,14 @@ public class ConversionPanel extends JPanel {
             timeRow.add(minSpinner);
             amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
             amPmSelector.setSelectedItem("AM");
+            amPmSelector.setFont(Theme.NORMAL_FONT.deriveFont(14f));
             timeRow.add(amPmSelector);
         }
         hhSpinner.setPreferredSize(new Dimension(70, 30));
         minSpinner.setPreferredSize(new Dimension(70, 30));
         
         amPmSelector.setPreferredSize(new Dimension(70, 30));
+        amPmSelector.setFont(Theme.NORMAL_FONT.deriveFont(14f));
 
         JButton updateTimeBtn = new JButton("Update to Current Time");
         Theme.styleButton(updateTimeBtn);
@@ -684,7 +599,7 @@ public class ConversionPanel extends JPanel {
         tapeDurationSpinner = new JSpinner(new SpinnerNumberModel(
             (int) conversion.duration.toMinutes(), 0, Integer.MAX_VALUE, 1));
         tapeDurationSpinner.setPreferredSize(new Dimension(100, 30));
-        tapeDurationSpinner.setFont(Theme.NORMAL_FONT.deriveFont(18f));
+        tapeDurationSpinner.setFont(Theme.NORMAL_FONT.deriveFont(16f));
 
         // status
         statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -705,7 +620,7 @@ public class ConversionPanel extends JPanel {
         statusSelector = new JComboBox<>(ConversionStatus.values());
         statusSelector.setSelectedItem(requireNonNullElse(conversion.status, ConversionStatus.NOT_STARTED));
         statusSelector.setPreferredSize(new Dimension(150, 30));
-        statusSelector.setFont(Theme.NORMAL_FONT.deriveFont(18f));
+        statusSelector.setFont(Theme.NORMAL_FONT.deriveFont(14f));
 
         StatusIndicator statusIndicator = new StatusIndicator();
         statusSelector.addActionListener(e -> {
@@ -978,6 +893,12 @@ public class ConversionPanel extends JPanel {
                 case DAMAGED:
                     setBackground(new Color(220, 53, 69)); // Bootstrap danger red
                     break;
+                case DAMAGE_FIXED:
+                    setBackground(new Color(255, 165, 0)); // Orange for fixed damage
+                    break;
+                case DAMAGE_IRREVERSIBLE:
+                    setBackground(new Color(128, 0, 128)); // Purple for irreversible damage
+                    break;
                 case IN_PROGRESS:
                     setBackground(new Color(255, 193, 7)); // Bootstrap warning yellow
                     break;
@@ -1058,7 +979,11 @@ public class ConversionPanel extends JPanel {
 
         JTree fileTree = new JTree(rootNode);
         fileTree.setRootVisible(true);
-        fileTree.expandRow(0); // Expand root node
+        
+        // Auto-expand all nodes to show the complete file structure
+        for (int i = 0; i < fileTree.getRowCount(); i++) {
+            fileTree.expandRow(i);
+        }
         
         // Style the tree with light mode
         fileTree.setFont(new Font("Segoe UI", Font.PLAIN, 12));
@@ -1251,10 +1176,13 @@ public class ConversionPanel extends JPanel {
         Theme.styleButton(markIrreversibleBtn);
         Theme.styleButton(addDamageEventBtn);
 
-        // Set button colors based on status
-        markDamagedBtn.setBackground(Color.RED);
-        markFixedBtn.setBackground(new Color(255, 165, 0)); // Orange
-        markIrreversibleBtn.setBackground(new Color(128, 0, 128)); // Purple
+        // Use default button colors for a streamlined look
+        markDamagedBtn.setBackground(UIManager.getColor("Button.background"));
+        markDamagedBtn.setForeground(UIManager.getColor("Button.foreground"));
+        markFixedBtn.setBackground(UIManager.getColor("Button.background"));
+        markFixedBtn.setForeground(UIManager.getColor("Button.foreground"));
+        markIrreversibleBtn.setBackground(UIManager.getColor("Button.background"));
+        markIrreversibleBtn.setForeground(UIManager.getColor("Button.foreground"));
 
         // Add action listeners
         markDamagedBtn.addActionListener(e -> {
@@ -1440,5 +1368,675 @@ public class ConversionPanel extends JPanel {
             repaint();
         }
     }
+
+    private void showAdvancedRenameDialog() {
+        if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "No files are linked to rename.",
+                "No Files",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+                        // Create main dialog with modern styling
+                JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Advanced Rename Options", true);
+                dialog.setSize(700, 600);
+                dialog.setLocationRelativeTo(this);
+                dialog.setResizable(true);
+                dialog.setMinimumSize(new Dimension(650, 550));
+
+                        // Main content panel with scroll capability
+                JPanel contentPanel = new JPanel(new BorderLayout(10, 10));
+                contentPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 10, 15));
+        contentPanel.setBackground(Color.WHITE);
+
+                        // Create main content area with new layout
+                JPanel mainContentPanel = new JPanel(new BorderLayout(10, 10));
+                mainContentPanel.setBackground(Color.WHITE);
+
+                // Top row: Strategy and Options panels side by side
+                JPanel topRowPanel = new JPanel(new GridLayout(1, 2, 10, 0));
+                topRowPanel.setBackground(Color.WHITE);
+
+                // Strategy selection panel with modern styling
+                JPanel strategyPanel = createModernPanel("Rename Strategy", new Color(240, 248, 255));
+                strategyPanel.setLayout(new BoxLayout(strategyPanel, BoxLayout.Y_AXIS));
+                strategyPanel.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(100, 150, 200), 1), 
+                        "Rename Strategy", TitledBorder.LEFT, TitledBorder.TOP, 
+                        new Font("Segoe UI", Font.BOLD, 12), new Color(60, 60, 60)),
+                    BorderFactory.createEmptyBorder(8, 12, 10, 12)
+                ));
+
+        ButtonGroup strategyGroup = new ButtonGroup();
+        JRadioButton prefixNameBtn = createStyledRadioButton("🏷️ Prefix with conversion name", true);
+        JRadioButton prefixNoteBtn = createStyledRadioButton("📝 Prefix with conversion note", false);
+        JRadioButton suffixNameBtn = createStyledRadioButton("🏷️➡️ Suffix with conversion name", false);
+        JRadioButton suffixNoteBtn = createStyledRadioButton("📝➡️ Suffix with conversion note", false);
+        JRadioButton replaceNoteBtn = createStyledRadioButton("📝 Rename to conversion note", false);
+        JRadioButton noteNumberBtn = createStyledRadioButton("📝🔢 Note + Number", false);
+        JRadioButton replaceBtn = createStyledRadioButton("🔄 Replace entire filename (classic)", false);
+        JRadioButton smartReplaceBtn = createStyledRadioButton("🧠 Smart replace (generic names only)", false);
+        JRadioButton customBtn = createStyledRadioButton("⚙️ Custom format...", false);
+
+        // Enhanced tooltips with better formatting
+        prefixNameBtn.setToolTipText("<html><b>Prefix with Conversion Name</b><br/>Example: 'Smith Family - IMG001.jpg'<br/>Best for: Most digitization workflows</html>");
+        prefixNoteBtn.setToolTipText("<html><b>Prefix with Conversion Note</b><br/>Example: 'Beach Trip 2023 - DSC001.jpg'<br/>Requires: Conversion must have a note</html>");
+        suffixNameBtn.setToolTipText("<html><b>Suffix with Conversion Name</b><br/>Example: 'IMG001 - Smith Family.jpg'<br/>Best for: When original names are meaningful</html>");
+        suffixNoteBtn.setToolTipText("<html><b>Suffix with Conversion Note</b><br/>Example: 'DSC001 - Beach Trip 2023.jpg'<br/>Requires: Conversion must have a note</html>");
+        replaceNoteBtn.setToolTipText("<html><b>Rename to Conversion Note</b><br/>Example: 'Beach Trip 2023.jpg'<br/>Best for: Quick directory/file renaming</html>");
+        noteNumberBtn.setToolTipText("<html><b>Note + Number</b><br/>Example: 'Beach Trip 2023 001.jpg'<br/>Best for: Preserving order with meaningful names</html>");
+        replaceBtn.setToolTipText("<html><b>Replace Entire Filename</b><br/>Example: 'Smith Family.jpg'<br/>Warning: Original information is lost</html>");
+        smartReplaceBtn.setToolTipText("<html><b>Smart Replace</b><br/>Only renames generic files like IMG_, DSC_, MOV_<br/>Best for: Mixed collections with meaningful names</html>");
+        customBtn.setToolTipText("<html><b>Custom Format</b><br/>Use variables for custom patterns<br/>Advanced: Full control over naming</html>");
+
+        strategyGroup.add(prefixNameBtn);
+        strategyGroup.add(prefixNoteBtn);
+        strategyGroup.add(suffixNameBtn);
+        strategyGroup.add(suffixNoteBtn);
+        strategyGroup.add(replaceNoteBtn);
+        strategyGroup.add(noteNumberBtn);
+        strategyGroup.add(replaceBtn);
+        strategyGroup.add(smartReplaceBtn);
+        strategyGroup.add(customBtn);
+
+                        strategyPanel.add(prefixNameBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(prefixNoteBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(suffixNameBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(suffixNoteBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(replaceNoteBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(noteNumberBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(replaceBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(smartReplaceBtn);
+                strategyPanel.add(Box.createVerticalStrut(4));
+                strategyPanel.add(customBtn);
+
+        // Custom format field with modern styling
+        JTextField customFormatField = new JTextField("{conversion_name} - {original_name}");
+        customFormatField.setEnabled(false);
+        customFormatField.setFont(new Font("Consolas", Font.PLAIN, 12));
+        customFormatField.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            BorderFactory.createEmptyBorder(8, 10, 8, 10)
+        ));
+        customFormatField.setToolTipText("<html><b>Custom Format Variables:</b><br/>" +
+            "• {conversion_name} - Name of the conversion<br/>" +
+            "• {conversion_note} - Note text from conversion<br/>" +
+            "• {original_name} - Original filename without extension<br/>" +
+            "• {original_number} - Numbers extracted from original filename</html>");
+        
+        JPanel customFormatPanel = new JPanel(new BorderLayout(10, 5));
+        customFormatPanel.setBackground(Color.WHITE);
+        customFormatPanel.add(new JLabel("Custom Format:"), BorderLayout.WEST);
+        customFormatPanel.add(customFormatField, BorderLayout.CENTER);
+        strategyPanel.add(Box.createVerticalStrut(10));
+        strategyPanel.add(customFormatPanel);
+
+        // Options panel with modern grid layout
+        JPanel optionsPanel = createModernPanel("Additional Options", new Color(248, 255, 248));
+                        optionsPanel.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(100, 200, 100), 1), 
+                        "Additional Options", TitledBorder.LEFT, TitledBorder.TOP, 
+                        new Font("Segoe UI", Font.BOLD, 12), new Color(60, 60, 60)),
+                    BorderFactory.createEmptyBorder(8, 12, 10, 12)
+                ));
+        optionsPanel.setLayout(new GridBagLayout());
+        GridBagConstraints ogbc = new GridBagConstraints();
+        ogbc.anchor = GridBagConstraints.WEST;
+        ogbc.insets = new Insets(8, 5, 8, 15);
+
+        JCheckBox includeSubdirs = createStyledCheckBox("📁 Include files in subdirectories", false);
+        includeSubdirs.setToolTipText("<html><b>Include Subdirectories</b><br/>Also rename files inside linked folders<br/>Use when: Conversions link to directories</html>");
+
+        JCheckBox useSequential = createStyledCheckBox("🔢 Use sequential numbers (001, 002, 003...)", false);
+        useSequential.setToolTipText("<html><b>Sequential Numbering</b><br/>Replace original numbering with sequence<br/>Result: Consistent numbering regardless of original names</html>");
+
+        JCheckBox addDate = createStyledCheckBox("📅 Add date prefix", false);
+        addDate.setToolTipText("<html><b>Date Prefix</b><br/>Add current date to beginning of filenames<br/>Example: '2024-01-15 - Smith Family - IMG001.jpg'</html>");
+
+        JLabel separatorLabel = new JLabel("🔗 Separator:");
+        separatorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        JComboBox<String> separatorCombo = new JComboBox<>(new String[]{" - ", "_", " ", "."});
+        separatorCombo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        separatorCombo.setToolTipText("<html><b>Separator Character</b><br/>Character(s) to separate conversion info from filename<br/>Example: 'Smith Family - IMG001.jpg' vs 'Smith Family_IMG001.jpg'</html>");
+
+        ogbc.gridx = 0; ogbc.gridy = 0; ogbc.gridwidth = 2;
+        optionsPanel.add(includeSubdirs, ogbc);
+        ogbc.gridy++;
+        optionsPanel.add(useSequential, ogbc);
+        ogbc.gridy++;
+        optionsPanel.add(addDate, ogbc);
+        ogbc.gridy++; ogbc.gridwidth = 1;
+        optionsPanel.add(separatorLabel, ogbc);
+        ogbc.gridx = 1;
+        optionsPanel.add(separatorCombo, ogbc);
+
+        // Preview panel with tree view for directory structure
+        JPanel previewPanel = createModernPanel("Preview", new Color(255, 248, 240));
+                        previewPanel.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createTitledBorder(BorderFactory.createLineBorder(new Color(200, 150, 100), 1), 
+                        "📋 Live Preview", TitledBorder.LEFT, TitledBorder.TOP, 
+                        new Font("Segoe UI", Font.BOLD, 12), new Color(60, 60, 60)),
+                    BorderFactory.createEmptyBorder(8, 12, 10, 12)
+                ));
+        previewPanel.setLayout(new BorderLayout());
+        
+        // Create tree for showing file structure
+        DefaultMutableTreeNode previewRootNode = new DefaultMutableTreeNode("Preview");
+        JTree previewTree = new JTree(previewRootNode);
+        previewTree.setRootVisible(false);
+        previewTree.setShowsRootHandles(true);
+        previewTree.setFont(new Font("Consolas", Font.PLAIN, 11));
+        previewTree.setBackground(new Color(252, 252, 252));
+        previewTree.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
+        JScrollPane previewScroll = new JScrollPane(previewTree);
+        previewScroll.setBorder(BorderFactory.createLineBorder(new Color(220, 220, 220)));
+        previewScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        previewScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        previewPanel.add(previewScroll, BorderLayout.CENTER);
+
+                                        // Add panels to top row
+                topRowPanel.add(strategyPanel);
+                topRowPanel.add(optionsPanel);
+
+                // Add top row and preview to main content
+                mainContentPanel.add(topRowPanel, BorderLayout.NORTH);
+                mainContentPanel.add(previewPanel, BorderLayout.CENTER);
+
+                // Create scroll pane for main content
+                JScrollPane mainScrollPane = new JScrollPane(mainContentPanel);
+                mainScrollPane.setBorder(null);
+                mainScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+                mainScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                mainScrollPane.getVerticalScrollBar().setUnitIncrement(16);
+
+                contentPanel.add(mainScrollPane, BorderLayout.CENTER);
+
+        // Update preview when options change
+        Runnable updatePreview = () -> {
+            // Clear the tree
+            previewRootNode.removeAllChildren();
+            
+            String separator = (String) separatorCombo.getSelectedItem();
+            String prefix = addDate.isSelected() ? java.time.LocalDate.now().toString() + separator : "";
+            boolean includeSubdirectories = includeSubdirs.isSelected();
+            
+            int fileCount = 0;
+            int maxPreview = 50; // Limit to prevent UI slowdown
+            
+            // Process each linked file/directory
+            for (FileReference fileRef : conversion.linkedFiles) {
+                if (fileCount >= maxPreview) break;
+                
+                File file = fileRef.getFile();
+                if (file.isDirectory()) {
+                    if (includeSubdirectories) {
+                        // Show directory contents (files inside will be renamed)
+                        DefaultMutableTreeNode dirNode = new DefaultMutableTreeNode("📁 " + file.getName() + "/ (contents will be renamed)");
+                        previewRootNode.add(dirNode);
+                        fileCount += addDirectoryPreview(dirNode, file, separator, prefix,
+                            prefixNameBtn.isSelected(), prefixNoteBtn.isSelected(),
+                            suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
+                            replaceNoteBtn.isSelected(), noteNumberBtn.isSelected(), replaceBtn.isSelected(), smartReplaceBtn.isSelected(),
+                            customBtn.isSelected(), customFormatField.getText(),
+                            useSequential.isSelected(), fileCount + 1, maxPreview - fileCount,
+                            includeSubdirectories);
+                    } else {
+                        // Show directory rename preview
+                        String originalName = file.getName();
+                        String newName = generatePreviewName(originalName, separator, prefix,
+                            prefixNameBtn.isSelected(), prefixNoteBtn.isSelected(),
+                            suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
+                            replaceNoteBtn.isSelected(), noteNumberBtn.isSelected(), replaceBtn.isSelected(), smartReplaceBtn.isSelected(),
+                            customBtn.isSelected(), customFormatField.getText(),
+                            useSequential.isSelected(), fileCount + 1);
+                        
+                        // Handle sequential numbering preview for note-based renaming
+                        if ((replaceNoteBtn.isSelected() || noteNumberBtn.isSelected()) && fileCount > 0) {
+                            // Extract base name and extension for sequential numbering
+                            String baseName = newName;
+                            String extension = "";
+                            int dotIndex = newName.lastIndexOf('.');
+                            if (dotIndex > 0) {
+                                baseName = newName.substring(0, dotIndex);
+                                extension = newName.substring(dotIndex);
+                            }
+                            newName = baseName + (fileCount > 0 ? " (" + fileCount + ")" : "") + extension;
+                        }
+                        
+                        DefaultMutableTreeNode dirNode = new DefaultMutableTreeNode(
+                            "📁 " + originalName + "/ → " + newName + "/");
+                        previewRootNode.add(dirNode);
+                        fileCount++;
+                    }
+                } else {
+                    // Single file preview
+                    String originalName = fileRef.getName();
+                    String newName = generatePreviewName(originalName, separator, prefix,
+                        prefixNameBtn.isSelected(), prefixNoteBtn.isSelected(),
+                        suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
+                        replaceNoteBtn.isSelected(), noteNumberBtn.isSelected(), replaceBtn.isSelected(), smartReplaceBtn.isSelected(),
+                        customBtn.isSelected(), customFormatField.getText(),
+                        useSequential.isSelected(), fileCount + 1);
+                    
+                    // Handle sequential numbering preview for note-based renaming
+                    if ((replaceNoteBtn.isSelected() || noteNumberBtn.isSelected()) && fileCount > 0) {
+                        // Extract base name and extension for sequential numbering
+                        String baseName = newName;
+                        String extension = "";
+                        int dotIndex = newName.lastIndexOf('.');
+                        if (dotIndex > 0) {
+                            baseName = newName.substring(0, dotIndex);
+                            extension = newName.substring(dotIndex);
+                        }
+                        newName = baseName + (fileCount > 0 ? " (" + fileCount + ")" : "") + extension;
+                    }
+                    
+                    String icon = "📄";
+                    DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(
+                        icon + " " + originalName + " → " + newName);
+                    previewRootNode.add(fileNode);
+                    fileCount++;
+                }
+            }
+            
+            if (conversion.linkedFiles.size() > maxPreview || fileCount >= maxPreview) {
+                DefaultMutableTreeNode moreNode = new DefaultMutableTreeNode(
+                    "... and more files (showing first " + Math.min(fileCount, maxPreview) + ")");
+                previewRootNode.add(moreNode);
+            }
+            
+            // Refresh tree display
+            ((DefaultTreeModel) previewTree.getModel()).reload();
+            
+            // Expand all nodes for better visibility
+            for (int i = 0; i < previewTree.getRowCount(); i++) {
+                previewTree.expandRow(i);
+            }
+        };
+
+        // Add listeners for preview updates
+        prefixNameBtn.addActionListener(e -> updatePreview.run());
+        prefixNoteBtn.addActionListener(e -> updatePreview.run());
+        suffixNameBtn.addActionListener(e -> updatePreview.run());
+        suffixNoteBtn.addActionListener(e -> updatePreview.run());
+        replaceNoteBtn.addActionListener(e -> updatePreview.run());
+        noteNumberBtn.addActionListener(e -> updatePreview.run());
+        replaceBtn.addActionListener(e -> updatePreview.run());
+        smartReplaceBtn.addActionListener(e -> updatePreview.run());
+        customBtn.addActionListener(e -> {
+            customFormatField.setEnabled(customBtn.isSelected());
+            if (customBtn.isSelected()) {
+                customFormatField.setBackground(Color.WHITE);
+            } else {
+                customFormatField.setBackground(new Color(240, 240, 240));
+            }
+            updatePreview.run();
+        });
+        customFormatField.getDocument().addDocumentListener(new DocumentListener() {
+            public void changedUpdate(DocumentEvent e) { updatePreview.run(); }
+            public void removeUpdate(DocumentEvent e) { updatePreview.run(); }
+            public void insertUpdate(DocumentEvent e) { updatePreview.run(); }
+        });
+        separatorCombo.addActionListener(e -> updatePreview.run());
+        useSequential.addActionListener(e -> updatePreview.run());
+        addDate.addActionListener(e -> updatePreview.run());
+
+        // Regular button panel with standard styling
+                        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+                buttonPanel.setBackground(new Color(248, 248, 248));
+                buttonPanel.setBorder(BorderFactory.createEmptyBorder(8, 15, 10, 15));
+
+        JButton previewButton = new JButton("🔄 Refresh Preview");
+        JButton renameButton = new JButton("✅ Rename Files");
+        JButton cancelButton = new JButton("❌ Cancel");
+
+        previewButton.addActionListener(e -> updatePreview.run());
+        
+        renameButton.addActionListener(e -> {
+            // Validate inputs
+            if (prefixNoteBtn.isSelected() || suffixNoteBtn.isSelected() || replaceNoteBtn.isSelected() || noteNumberBtn.isSelected()) {
+                if (conversion.note.trim().isEmpty()) {
+                    JOptionPane.showMessageDialog(dialog,
+                        "Conversion note is empty. Please add a note first or choose a different strategy.",
+                        "Missing Note",
+                        JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+            }
+            
+            if (customBtn.isSelected() && customFormatField.getText().trim().isEmpty()) {
+                JOptionPane.showMessageDialog(dialog,
+                    "Please enter a custom format pattern.",
+                    "Missing Format",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+
+            // Confirm rename operation
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                String.format("Rename %d file(s) using the selected strategy?\n\nThis action cannot be undone.", 
+                    conversion.linkedFiles.size()),
+                "Confirm Rename",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+            
+            if (confirm == JOptionPane.YES_OPTION) {
+                // Execute rename with selected strategy
+                executeAdvancedRename(
+                    (String) separatorCombo.getSelectedItem(),
+                    addDate.isSelected(),
+                    prefixNameBtn.isSelected(), prefixNoteBtn.isSelected(),
+                    suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
+                    replaceNoteBtn.isSelected(), noteNumberBtn.isSelected(), replaceBtn.isSelected(), smartReplaceBtn.isSelected(),
+                    customBtn.isSelected(), customFormatField.getText(),
+                    includeSubdirs.isSelected(), useSequential.isSelected()
+                );
+                dialog.dispose();
+            }
+        });
+
+        cancelButton.addActionListener(e -> dialog.dispose());
+
+        buttonPanel.add(previewButton);
+        buttonPanel.add(renameButton);
+        buttonPanel.add(cancelButton);
+
+        // Initial preview
+        updatePreview.run();
+
+        // Layout dialog
+        dialog.add(contentPanel, BorderLayout.CENTER);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.setVisible(true);
+    }
+
+    private String generatePreviewName(String originalName, String separator, String prefix,
+            boolean prefixName, boolean prefixNote, boolean suffixName, boolean suffixNote,
+            boolean replaceNote, boolean noteNumber, boolean replace, boolean smartReplace, boolean custom, String customFormat,
+            boolean useSequential, int sequenceNumber) {
+        
+        String baseName = originalName;
+        String extension = "";
+        int dotIndex = originalName.lastIndexOf('.');
+        if (dotIndex > 0) {
+            baseName = originalName.substring(0, dotIndex);
+            extension = originalName.substring(dotIndex);
+        }
+
+        String conversionInfo = conversion.name;
+        if ((prefixNote || suffixNote) && !conversion.note.trim().isEmpty()) {
+            conversionInfo = conversion.note;
+        }
+
+        String result = prefix;
+
+        // Handle "Rename to conversion note" option
+        if (replaceNote) {
+            custom = true;
+            customFormat = "{conversion_note}";
+        }
+        
+        // Handle "Note + Number" option
+        if (noteNumber) {
+            custom = true;
+            customFormat = "{conversion_note} {original_number}";
+        }
+
+        if (custom) {
+            result += customFormat
+                .replace("{conversion_name}", conversion.name)
+                .replace("{conversion_note}", conversion.note)
+                .replace("{original_name}", baseName)
+                .replace("{original_number}", useSequential ? String.format("%03d", sequenceNumber) : extractNumbers(baseName));
+        } else if (prefixName || prefixNote) {
+            result += conversionInfo + separator + baseName;
+        } else if (suffixName || suffixNote) {
+            result += baseName + separator + conversionInfo;
+        } else if (replace) {
+            result += conversionInfo + (useSequential ? String.format(" (%03d)", sequenceNumber) : "");
+        } else if (smartReplace) {
+            if (isGenericFilename(baseName)) {
+                result += conversionInfo + separator + (useSequential ? String.format("%03d", sequenceNumber) : extractNumbers(baseName));
+            } else {
+                result += originalName; // Keep original if not generic
+                return result; // Return early to avoid adding extension again
+            }
+        }
+
+        return result + extension;
+    }
+
+    private boolean isGenericFilename(String filename) {
+        String lower = filename.toLowerCase();
+        return lower.startsWith("img_") || lower.startsWith("dsc_") || lower.startsWith("mov_") ||
+               lower.startsWith("vid_") || lower.startsWith("pic_") || lower.startsWith("p") ||
+               lower.matches("\\d+") || lower.matches("track\\d+") || lower.matches("audio_\\d+") ||
+               lower.startsWith("dsc") || lower.startsWith("img") || lower.startsWith("mov") ||
+               lower.startsWith("vid") || lower.startsWith("pic") ||
+               lower.endsWith("_img") || lower.endsWith("_dsc") || lower.endsWith("_mov") ||
+               lower.endsWith("_vid") || lower.endsWith("_pic") || lower.endsWith("_photo") ||
+               lower.endsWith("_image") || lower.endsWith("_audio") || lower.endsWith("_track") ||
+               lower.matches(".*\\d{3,4}.*") || // Contains 3-4 digit numbers
+               lower.matches(".*\\d{2,3}\\..*"); // Contains 2-3 digits before extension
+    }
+
+    private String extractNumbers(String filename) {
+        return filename.replaceAll("[^0-9]", "");
+    }
+
+    private int addDirectoryPreview(DefaultMutableTreeNode parentNode, File directory, String separator, String prefix,
+            boolean prefixName, boolean prefixNote, boolean suffixName, boolean suffixNote,
+            boolean replaceNote, boolean noteNumber, boolean replace, boolean smartReplace, boolean custom, String customFormat,
+            boolean useSequential, int startSequence, int maxFiles, boolean includeSubdirectories) {
+        
+        File[] files = directory.listFiles();
+        if (files == null || maxFiles <= 0) return 0;
+        
+        int fileCount = 0;
+        int sequenceNumber = startSequence;
+        
+        // Sort files for consistent preview (directories first, then files)
+        java.util.Arrays.sort(files, (a, b) -> {
+            if (a.isDirectory() && !b.isDirectory()) return -1;
+            if (!a.isDirectory() && b.isDirectory()) return 1;
+            return a.getName().compareToIgnoreCase(b.getName());
+        });
+        
+        for (File file : files) {
+            if (fileCount >= maxFiles) break;
+            
+            String originalName = file.getName();
+            String icon = file.isDirectory() ? "📁" : "📄";
+            
+            if (file.isDirectory()) {
+                // Show directory (not renamed, just listed)
+                DefaultMutableTreeNode dirNode = new DefaultMutableTreeNode(icon + " " + originalName + "/");
+                parentNode.add(dirNode);
+                
+                // Only recurse into subdirectories if includeSubdirectories is enabled
+                // and we haven't exceeded depth limits
+                if (includeSubdirectories && parentNode.getLevel() < 2) { // Limit to 2 levels deep
+                    int subFileCount = addDirectoryPreview(dirNode, file, separator, prefix,
+                        prefixName, prefixNote, suffixName, suffixNote,
+                        replaceNote, noteNumber, replace, smartReplace, custom, customFormat,
+                        useSequential, sequenceNumber, Math.min(10, maxFiles - fileCount - 1), includeSubdirectories);
+                    fileCount += subFileCount;
+                    sequenceNumber += subFileCount;
+                }
+                fileCount++;
+            } else {
+                // Show file with rename preview
+                String newName = generatePreviewName(originalName, separator, prefix,
+                    prefixName, prefixNote, suffixName, suffixNote,
+                    replaceNote, noteNumber, replace, smartReplace, custom, customFormat,
+                    useSequential, sequenceNumber);
+                
+                DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(
+                    icon + " " + originalName + " → " + newName);
+                parentNode.add(fileNode);
+                fileCount++;
+                
+                if (useSequential) {
+                    sequenceNumber++;
+                }
+            }
+        }
+        
+        if (files.length > fileCount) {
+            DefaultMutableTreeNode moreNode = new DefaultMutableTreeNode(
+                "... (" + (files.length - fileCount) + " more items)");
+            parentNode.add(moreNode);
+        }
+        
+        return fileCount;
+    }
+
+    private void quickRenameToNote() {
+        if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "No files are linked to rename.",
+                "No Files",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        if (conversion.note.trim().isEmpty()) {
+            JOptionPane.showMessageDialog(this,
+                "Conversion note is empty. Please add a note first.",
+                "Missing Note",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Confirm rename operation
+        int confirm = JOptionPane.showConfirmDialog(this,
+            String.format("Rename linked directories to \"%s\"?\n\nThis action cannot be undone.", 
+                conversion.note),
+            "Confirm Quick Rename",
+            JOptionPane.YES_NO_OPTION,
+            JOptionPane.QUESTION_MESSAGE);
+        
+        if (confirm == JOptionPane.YES_OPTION) {
+            try {
+                // Convert FileReferences to Files for the rename operation
+                ArrayList<File> filesToRename = new ArrayList<>();
+                for (FileReference fileRef : conversion.linkedFiles) {
+                    filesToRename.add(fileRef.getFile());
+                }
+                
+                // Use custom format with just the conversion note
+                Util.renameFilesWithAdvancedOptions(
+                    filesToRename,
+                    conversion.name,
+                    conversion.note,
+                    " - ", // Default separator
+                    false, // No date prefix
+                    false, false, false, false, // No prefix/suffix
+                    false, false, // No replace/smart replace
+                    true, "{conversion_note}", // Custom format with conversion note
+                    false, false, // No subdirectories, no sequential
+                    conversion
+                );
+                
+                updateLinkedFiles();
+                projectFrame.markUnsavedChanges();
+                
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Error during rename operation: " + ex.getMessage(),
+                    "Rename Error",
+                    JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+
+    private void executeAdvancedRename(String separator, boolean addDate,
+            boolean prefixName, boolean prefixNote, boolean suffixName, boolean suffixNote,
+            boolean replaceNote, boolean noteNumber, boolean replace, boolean smartReplace, boolean custom, String customFormat,
+            boolean includeSubdirs, boolean useSequential) {
+        
+        try {
+            // Convert FileReferences to Files for the rename operation
+            ArrayList<File> filesToRename = new ArrayList<>();
+            for (FileReference fileRef : conversion.linkedFiles) {
+                filesToRename.add(fileRef.getFile());
+            }
+            
+            // Handle "Rename to conversion note" option
+            if (replaceNote) {
+                custom = true;
+                customFormat = "{conversion_note}";
+                // Force sequential numbering to prevent conflicts when renaming multiple files
+                useSequential = true;
+            }
+            
+            // Handle "Note + Number" option
+            if (noteNumber) {
+                custom = true;
+                customFormat = "{conversion_note} {original_number}";
+                // Force sequential numbering to prevent conflicts when renaming multiple files
+                useSequential = true;
+            }
+            
+            Util.renameFilesWithAdvancedOptions(
+                filesToRename,
+                conversion.name,
+                conversion.note,
+                separator,
+                addDate,
+                prefixName, prefixNote, suffixName, suffixNote,
+                replace, smartReplace, custom, customFormat,
+                includeSubdirs, useSequential,
+                conversion
+            );
+            
+            updateLinkedFiles();
+            projectFrame.markUnsavedChanges();
+            
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(this,
+                "Error during rename operation: " + ex.getMessage(),
+                "Rename Error",
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    // Helper methods for modern UI styling
+    private JPanel createModernPanel(String title, Color backgroundColor) {
+        JPanel panel = new JPanel();
+        panel.setBackground(backgroundColor);
+        return panel;
+    }
+
+    private JRadioButton createStyledRadioButton(String text, boolean selected) {
+        JRadioButton button = new JRadioButton(text, selected);
+        button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        button.setBackground(Color.WHITE);
+        button.setForeground(new Color(60, 60, 60));
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        return button;
+    }
+
+    private JCheckBox createStyledCheckBox(String text, boolean selected) {
+        JCheckBox checkBox = new JCheckBox(text, selected);
+        checkBox.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        checkBox.setBackground(Color.WHITE);
+        checkBox.setForeground(new Color(60, 60, 60));
+        checkBox.setFocusPainted(false);
+        checkBox.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        return checkBox;
+    }
+
+
 
 }

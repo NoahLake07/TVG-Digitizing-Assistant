@@ -55,7 +55,7 @@ public class ProjectFrame extends JFrame {
         super();
         this.project = project;
         setUndecorated(true);
-        setSize(1000, 700);
+        setSize(1200, 800);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         DigitizingAssistant.setIcon(this);
@@ -1727,6 +1727,23 @@ public class ProjectFrame extends JFrame {
         conversionListPanel.repaint();
     }
 
+    // Refresh the sidebar and reselect the given conversion
+    public void refreshConversionListAndReselect(Conversion conversionToSelect) {
+        String targetName = conversionToSelect.name;
+        refreshConversionList();
+
+        // Find and reselect matching button by name
+        for (Component c : conversionListPanel.getComponents()) {
+            if (c instanceof JButton) {
+                JButton btn = (JButton) c;
+                if (btn.getText().equals(targetName)) {
+                    btn.doClick();
+                    break;
+                }
+            }
+        }
+    }
+
     private void addContextMenu(JButton conversionBtn, Conversion conversion) {
         JPopupMenu contextMenu = new JPopupMenu();
         
@@ -2182,9 +2199,139 @@ public class ProjectFrame extends JFrame {
 
     private void showSmartRenameDialog() {
         try {
-            // Analyze all conversions to categorize them
-            Map<String, ConversionCategory> conversionCategories = analyzeConversions();
+            // Pre-validation: Check for potential issues
+            List<String> validationErrors = new ArrayList<>();
+            List<String> validationWarnings = new ArrayList<>();
             
+            // Check if project has conversions
+            if (project.getConversions().isEmpty()) {
+                validationErrors.add("No conversions found in project");
+            }
+            
+            // Check for conversions with linked files
+            int conversionsWithFiles = 0;
+            for (Conversion conversion : project.getConversions()) {
+                if (conversion.linkedFiles != null && !conversion.linkedFiles.isEmpty()) {
+                    conversionsWithFiles++;
+                }
+            }
+            
+            if (conversionsWithFiles == 0) {
+                validationWarnings.add("No conversions have linked files - analysis will be limited");
+            }
+            
+            // Check for potentially problematic paths
+            for (Conversion conversion : project.getConversions()) {
+                if (conversion.linkedFiles != null) {
+                    for (FileReference fileRef : conversion.linkedFiles) {
+                        try {
+                            if (fileRef.exists()) {
+                                if (fileRef.getFile().isDirectory()) {
+                                    // Test directory access
+                                    try {
+                                        fileRef.getFile().listFiles();
+                                    } catch (Exception e) {
+                                        validationWarnings.add("Directory not accessible: " + fileRef.getPath() + " (" + e.getMessage() + ")");
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            validationWarnings.add("Invalid path: " + fileRef.getPath() + " (" + e.getMessage() + ")");
+                        }
+                    }
+                }
+            }
+            
+            // Show validation results
+            if (!validationErrors.isEmpty() || !validationWarnings.isEmpty()) {
+                StringBuilder message = new StringBuilder();
+                if (!validationErrors.isEmpty()) {
+                    message.append("Errors found:\n");
+                    for (String error : validationErrors) {
+                        message.append("• ").append(error).append("\n");
+                    }
+                    message.append("\n");
+                }
+                if (!validationWarnings.isEmpty()) {
+                    message.append("Warnings:\n");
+                    for (String warning : validationWarnings) {
+                        message.append("• ").append(warning).append("\n");
+                    }
+                    message.append("\n");
+                }
+                message.append("Found ").append(conversionsWithFiles).append(" conversions with linked files.\n\n");
+                message.append("Do you want to continue with the analysis?");
+                
+                int result = JOptionPane.showConfirmDialog(this, 
+                    message.toString(),
+                    "Smart Renaming Analysis Validation", 
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+                
+                if (result != JOptionPane.YES_OPTION) {
+                    return;
+                }
+            }
+            
+            // Show progress dialog
+            JDialog progressDialog = new JDialog(this, "Analyzing Conversions", true);
+            progressDialog.setSize(400, 150);
+            progressDialog.setLocationRelativeTo(this);
+            progressDialog.setResizable(false);
+            
+            JPanel panel = new JPanel(new BorderLayout(10, 10));
+            panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+            
+            JLabel statusLabel = new JLabel("Analyzing conversions...");
+            JProgressBar progressBar = new JProgressBar();
+            progressBar.setIndeterminate(true);
+            
+            panel.add(statusLabel, BorderLayout.NORTH);
+            panel.add(progressBar, BorderLayout.CENTER);
+            
+            progressDialog.add(panel);
+            
+            // Start analysis in background thread
+            Thread analysisThread = new Thread(() -> {
+                try {
+                    // Analyze all conversions to categorize them
+                    Map<String, ConversionCategory> conversionCategories = analyzeConversions();
+                    
+                    // Close progress dialog and show results
+                    SwingUtilities.invokeLater(() -> {
+                        progressDialog.dispose();
+                        showSmartRenameResults(conversionCategories);
+                    });
+                    
+                } catch (Exception e) {
+                    // Log the error for debugging
+                    System.err.println("Error during smart renaming analysis: " + e.getMessage());
+                    e.printStackTrace();
+                    
+                    // Close progress dialog and show error
+                    SwingUtilities.invokeLater(() -> {
+                        progressDialog.dispose();
+                        JOptionPane.showMessageDialog(this, 
+                            "Error during analysis: " + e.getMessage() + "\n\nCheck the console for more details.",
+                            "Analysis Error", 
+                            JOptionPane.ERROR_MESSAGE);
+                    });
+                }
+            });
+            
+            analysisThread.start();
+            progressDialog.setVisible(true);
+            
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, 
+                "Error starting smart renaming analysis: " + e.getMessage(),
+                "Analysis Error", 
+                JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    private void showSmartRenameResults(Map<String, ConversionCategory> conversionCategories) {
+        try {
             // Create analysis summary
             StringBuilder analysis = new StringBuilder();
             analysis.append("Content Analysis Results:\n\n");

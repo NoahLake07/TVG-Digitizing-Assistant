@@ -406,6 +406,16 @@ public class DigitizingAssistant {
                                         "Project has been upgraded to the new format.",
                                         "Upgrade Complete",
                                         JOptionPane.INFORMATION_MESSAGE);
+                                } catch (java.io.InvalidClassException e) {
+                                    // Handle serialization version mismatch specifically
+                                    JOptionPane.showMessageDialog(projectChooser,
+                                        "This project file is from a very old version that cannot be automatically upgraded.\n\n" +
+                                        "You may need to:\n" +
+                                        "1. Use an older version of the application to open it first\n" +
+                                        "2. Or manually recreate the project from the original files\n\n" +
+                                        "Error details: " + e.getMessage(),
+                                        "Upgrade Failed - Incompatible Version",
+                                        JOptionPane.ERROR_MESSAGE);
                                 } catch (Exception ex) {
                                     JOptionPane.showMessageDialog(projectChooser,
                                         "Error upgrading project: " + ex.getMessage(),

@@ -1,7 +1,6 @@
 package com.thevideogoat.digitizingassistant.data;
 
 import com.thevideogoat.digitizingassistant.ui.DigitizingAssistant;
-import com.thevideogoat.digitizingassistant.data.Preferences;
 
 import javax.swing.*;
 import java.io.File;
@@ -17,9 +16,19 @@ public class Util {
         if (i > 0) {
             extension = file.getName().substring(i);
         }
-        File newFile = new File(file.getParentFile(), newName + extension);
-        file.renameTo(newFile);
-        return newFile;
+        
+        // Check if newName already contains the extension
+        if (newName.toLowerCase().endsWith(extension.toLowerCase())) {
+            // newName already has the extension, don't add it again
+            File newFile = new File(file.getParentFile(), newName);
+            file.renameTo(newFile);
+            return newFile;
+        } else {
+            // Add the extension to newName
+            File newFile = new File(file.getParentFile(), newName + extension);
+            file.renameTo(newFile);
+            return newFile;
+        }
     }
 
     public static boolean deleteFile(File file){
@@ -308,6 +317,291 @@ public class Util {
             }
         }
         return count;
+    }
+
+    public static void renameFilesWithAdvancedOptions(ArrayList<File> files, String conversionName, String conversionNote,
+            String separator, boolean addDate, boolean prefixName, boolean prefixNote, 
+            boolean suffixName, boolean suffixNote, boolean replace, boolean smartReplace, 
+            boolean custom, String customFormat, boolean includeSubdirectories, boolean useSequential,
+            Conversion conversion) {
+        
+        if (files.isEmpty()) {
+            return;
+        }
+
+        int renamedCount = 0;
+        int sequenceNumber = 1;
+        String datePrefix = addDate ? java.time.LocalDate.now().toString() + separator : "";
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                if (includeSubdirectories) {
+                    // Rename files INSIDE the directory (keep directory name)
+                    renamedCount += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote, 
+                        separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote, 
+                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber);
+                } else {
+                    // Rename the DIRECTORY itself
+                    String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
+                        separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
+                        replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
+                    
+                    if (!newName.equals(file.getName())) {
+                        File newFile = renameFile(file, newName);
+                        renamedCount++;
+                        
+                        // Update linked file references to point to new directory path
+                        updateLinkedFileReferences(conversion, file, newFile);
+                    }
+                    
+                    if (useSequential) {
+                        sequenceNumber++;
+                    }
+                }
+            } else {
+                // Handle individual file renaming
+                String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
+                    separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
+                    replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
+                
+                if (!newName.equals(file.getName())) {
+                    renameFile(file, newName);
+                    renamedCount++;
+                }
+                
+                if (useSequential) {
+                    sequenceNumber++;
+                }
+            }
+        }
+
+        JOptionPane.showMessageDialog(null, 
+            "Advanced rename completed! Renamed " + renamedCount + " files.", 
+            "Rename Success", 
+            JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private static int renameFilesInDirectoryAdvanced(File directory, String conversionName, String conversionNote,
+            String separator, String datePrefix, boolean prefixName, boolean prefixNote,
+            boolean suffixName, boolean suffixNote, boolean replace, boolean smartReplace,
+            boolean custom, String customFormat, boolean includeSubdirectories, boolean useSequential, int startSequence) {
+        
+        File[] files = directory.listFiles();
+        if (files == null) return 0;
+
+        int count = 0;
+        int sequenceNumber = startSequence;
+        
+        // Track used names to prevent conflicts
+        java.util.Set<String> usedNames = new java.util.HashSet<>();
+
+        for (File file : files) {
+            if (file.isDirectory()) {
+                // Only recurse into subdirectories if the includeSubdirectories option is enabled
+                if (includeSubdirectories) {
+                    count += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote,
+                        separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
+                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber);
+                }
+                // Note: We don't rename the directory itself, only files
+            } else {
+                // Rename individual files
+                String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
+                    separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
+                    replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
+                
+                // Check for name conflicts and resolve them
+                String finalName = newName;
+                int conflictCounter = 1;
+                while (usedNames.contains(finalName)) {
+                    // Extract base name and extension, removing any existing numbering
+                    String baseName = finalName;
+                    String extension = "";
+                    int dotIndex = finalName.lastIndexOf('.');
+                    if (dotIndex > 0) {
+                        baseName = finalName.substring(0, dotIndex);
+                        extension = finalName.substring(dotIndex);
+                    }
+                    
+                    // Remove any existing numbering pattern like " (1)", " (2)", etc.
+                    baseName = baseName.replaceAll(" \\(\\d+\\)$", "");
+                    
+                    // Add sequential number to resolve conflict
+                    finalName = baseName + " (" + conflictCounter + ")" + extension;
+                    conflictCounter++;
+                }
+                
+                // Add to used names set
+                usedNames.add(finalName);
+                
+                if (!finalName.equals(file.getName())) {
+                    renameFile(file, finalName);
+                    count++;
+                }
+                
+                if (useSequential) {
+                    sequenceNumber++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private static String generateAdvancedFileName(String originalName, String conversionName, String conversionNote,
+            String separator, String datePrefix, boolean prefixName, boolean prefixNote,
+            boolean suffixName, boolean suffixNote, boolean replace, boolean smartReplace,
+            boolean custom, String customFormat, boolean useSequential, int sequenceNumber) {
+        
+        String baseName = originalName;
+        String extension = "";
+        
+        // Handle cases where there might be multiple dots (like "file.name.JPG")
+        // Find the last dot that's followed by a valid file extension
+        int dotIndex = -1;
+        String lowerName = originalName.toLowerCase();
+        
+        // Common image/video extensions
+        String[] commonExtensions = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", 
+                                   ".mov", ".mp4", ".avi", ".wmv", ".flv", ".mkv",
+                                   ".mp3", ".wav", ".aac", ".flac", ".wma"};
+        
+        // First, try to find the last valid extension
+        for (String ext : commonExtensions) {
+            int index = lowerName.lastIndexOf(ext);
+            if (index > dotIndex) {
+                dotIndex = index;
+            }
+        }
+        
+        // If no common extension found, fall back to last dot
+        if (dotIndex == -1) {
+            dotIndex = originalName.lastIndexOf('.');
+        }
+        
+        // Additional safety: if we found a dot but it's not followed by a valid extension,
+        // and there's another dot further back, try to find a better extension
+        if (dotIndex > 0) {
+            String potentialExtension = originalName.substring(dotIndex).toLowerCase();
+            boolean hasValidExtension = false;
+            for (String ext : commonExtensions) {
+                if (potentialExtension.equals(ext)) {
+                    hasValidExtension = true;
+                    break;
+                }
+            }
+            
+            // If this extension isn't valid, try to find a better one
+            if (!hasValidExtension) {
+                int betterDotIndex = originalName.lastIndexOf('.', dotIndex - 1);
+                if (betterDotIndex > 0) {
+                    String betterExtension = originalName.substring(betterDotIndex).toLowerCase();
+                    for (String ext : commonExtensions) {
+                        if (betterExtension.equals(ext)) {
+                            dotIndex = betterDotIndex;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Final safety check: if we still have a double extension issue,
+        // try to find the most likely real extension by looking for patterns
+        if (dotIndex > 0) {
+            String currentExtension = originalName.substring(dotIndex).toLowerCase();
+            // Check if this looks like a double extension (e.g., ".mp4.mp4")
+            if (currentExtension.contains(".")) {
+                // We have a double extension, try to find the real one
+                String[] parts = currentExtension.split("\\.");
+                if (parts.length > 1) {
+                    // Look for the last valid extension part
+                    for (int i = parts.length - 1; i >= 0; i--) {
+                        String potentialExt = "." + parts[i];
+                        for (String validExt : commonExtensions) {
+                            if (potentialExt.equals(validExt)) {
+                                // Found a valid extension, adjust dotIndex
+                                dotIndex = originalName.length() - potentialExt.length();
+                                break;
+                            }
+                        }
+                        if (dotIndex != originalName.length() - currentExtension.length()) {
+                            break; // Found a valid extension
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (dotIndex > 0) {
+            baseName = originalName.substring(0, dotIndex);
+            extension = originalName.substring(dotIndex);
+        }
+
+        String conversionInfo = conversionName;
+        if ((prefixNote || suffixNote) && conversionNote != null && !conversionNote.trim().isEmpty()) {
+            conversionInfo = conversionNote;
+        }
+
+        String result = datePrefix;
+
+        if (custom && customFormat != null && !customFormat.trim().isEmpty()) {
+            result += customFormat
+                .replace("{conversion_name}", conversionName != null ? conversionName : "")
+                .replace("{conversion_note}", conversionNote != null ? conversionNote : "")
+                .replace("{original_name}", baseName) // baseName is already without extension
+                .replace("{original_number}", useSequential ? String.format("%03d", sequenceNumber) : extractNumbersFromFilename(baseName));
+        } else if (prefixName || prefixNote) {
+            result += conversionInfo + separator + baseName;
+        } else if (suffixName || suffixNote) {
+            result += baseName + separator + conversionInfo;
+        } else if (replace) {
+            result += conversionInfo + (useSequential ? String.format(" (%03d)", sequenceNumber) : "");
+        } else if (smartReplace) {
+            if (isGenericFilename(baseName)) {
+                result += conversionInfo + separator + (useSequential ? String.format("%03d", sequenceNumber) : extractNumbersFromFilename(baseName));
+            } else {
+                return originalName; // Keep original if not generic
+            }
+        } else {
+            return originalName; // No strategy selected, keep original
+        }
+
+        return result + extension;
+    }
+
+    private static boolean isGenericFilename(String filename) {
+        String lower = filename.toLowerCase();
+        return lower.startsWith("img_") || lower.startsWith("dsc_") || lower.startsWith("mov_") ||
+               lower.startsWith("vid_") || lower.startsWith("pic_") || lower.startsWith("p") ||
+               lower.startsWith("track") || lower.startsWith("audio_") || 
+               lower.matches("\\d+") || lower.matches("track\\d+") || lower.matches("audio_\\d+") ||
+               lower.startsWith("dsc") || lower.startsWith("img") || lower.startsWith("mov") ||
+               lower.startsWith("vid") || lower.startsWith("pic") ||
+               lower.endsWith("_img") || lower.endsWith("_dsc") || lower.endsWith("_mov") ||
+               lower.endsWith("_vid") || lower.endsWith("_pic") || lower.endsWith("_photo") ||
+               lower.endsWith("_image") || lower.endsWith("_audio") || lower.endsWith("_track") ||
+               lower.matches(".*\\d{3,4}.*") || // Contains 3-4 digit numbers
+               lower.matches(".*\\d{2,3}\\..*"); // Contains 2-3 digits before extension
+    }
+
+    private static String extractNumbersFromFilename(String filename) {
+        String numbers = filename.replaceAll("[^0-9]", "");
+        return numbers.isEmpty() ? "001" : numbers;
+    }
+
+    private static void updateLinkedFileReferences(Conversion conversion, File oldFile, File newFile) {
+        if (conversion.linkedFiles == null) return;
+        
+        // Update any linked file references that point to the old directory
+        for (int i = 0; i < conversion.linkedFiles.size(); i++) {
+            FileReference fileRef = conversion.linkedFiles.get(i);
+            
+            // Check if this reference points to the renamed directory
+            if (fileRef.getPath().equals(oldFile.getAbsolutePath())) {
+                // Update to point to the new directory
+                conversion.linkedFiles.set(i, new FileReference(newFile));
+            }
+        }
     }
 
     public static void relinkToTrimmedFiles(Project project) {

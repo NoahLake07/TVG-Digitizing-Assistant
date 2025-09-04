@@ -18,6 +18,9 @@ import java.util.ArrayList;
 
 public class Project implements Serializable {
 
+    @Serial
+    private static final long serialVersionUID = 1L;
+    
     String name;
     ArrayList<Conversion> conversions;
 
@@ -35,8 +38,11 @@ public class Project implements Serializable {
             this.name = project.name;
             this.conversions = project.conversions;
             objectInputStream.close();
+        } catch (java.io.InvalidClassException e) {
+            // Handle serialization version mismatch
+            throw new RuntimeException("Project file is from an incompatible version. Please use the upgrade option in the main menu.", e);
         } catch (IOException | ClassNotFoundException e) {
-            throw new RuntimeException(e);
+            throw new RuntimeException("Failed to load project: " + e.getMessage(), e);
         }
 
         // update serial ids if from an older version
@@ -101,6 +107,7 @@ public class Project implements Serializable {
                     // Parse the date string (format: "MM/DD/YYYY")
                     String[] dateParts = dateStr.split("/");
                     if (dateParts.length == 3) {
+                        // Date constructor expects (day, month, year) but toString() returns "MM/DD/YYYY"
                         conversion.dateOfConversion = new Date(dateParts[1], dateParts[0], dateParts[2]);
                     }
                 }
@@ -169,6 +176,14 @@ public class Project implements Serializable {
                 conversionJson.addProperty("technicianNotes", conversion.technicianNotes);
                 conversionJson.addProperty("isDataOnly", conversion.isDataOnly);
                 conversionJson.addProperty("duration", conversion.duration.toString());
+                
+                // Save conversion date and time to preserve original timestamps
+                if (conversion.dateOfConversion != null) {
+                    conversionJson.addProperty("dateOfConversion", conversion.dateOfConversion.toString());
+                }
+                if (conversion.timeOfConversion != null) {
+                    conversionJson.addProperty("timeOfConversion", conversion.timeOfConversion.toString());
+                }
                 
                 // Add damage history for version 1.6+
                 if (conversion.damageHistory != null && !conversion.damageHistory.isEmpty()) {
