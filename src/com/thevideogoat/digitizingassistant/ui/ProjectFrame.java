@@ -734,6 +734,25 @@ public class ProjectFrame extends JFrame {
             }
         });
 
+        // Ctrl+Enter to mark current conversion as Completed and save
+        im.put(KeyStroke.getKeyStroke("control ENTER"), "completeConversion");
+        am.put("completeConversion", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (detailsPanel.getComponentCount() > 0 &&
+                    detailsPanel.getComponent(0) instanceof JScrollPane) {
+                    JScrollPane sp = (JScrollPane) detailsPanel.getComponent(0);
+                    Component view = sp.getViewport().getView();
+                    if (view instanceof ConversionPanel) {
+                        ConversionPanel cp = (ConversionPanel) view;
+                        cp.statusSelector.setSelectedItem(ConversionStatus.COMPLETED);
+                        cp.updateConversion();
+                        saveProject();
+                    }
+                }
+            }
+        });
+
         // [ and ] keys for navigation
         im.put(KeyStroke.getKeyStroke('['), "selectPrevious");
         am.put("selectPrevious", new AbstractAction() {

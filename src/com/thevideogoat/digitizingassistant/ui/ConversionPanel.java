@@ -1429,15 +1429,15 @@ public class ConversionPanel extends JPanel {
                 ));
 
         ButtonGroup strategyGroup = new ButtonGroup();
-        JRadioButton prefixNameBtn = createStyledRadioButton("🏷️ Prefix with conversion name", true);
-        JRadioButton prefixNoteBtn = createStyledRadioButton("📝 Prefix with conversion note", false);
-        JRadioButton suffixNameBtn = createStyledRadioButton("🏷️➡️ Suffix with conversion name", false);
-        JRadioButton suffixNoteBtn = createStyledRadioButton("📝➡️ Suffix with conversion note", false);
-        JRadioButton replaceNoteBtn = createStyledRadioButton("📝 Rename to conversion note", false);
-        JRadioButton noteNumberBtn = createStyledRadioButton("📝🔢 Note + Number", false);
-        JRadioButton replaceBtn = createStyledRadioButton("🔄 Replace entire filename (classic)", false);
-        JRadioButton smartReplaceBtn = createStyledRadioButton("🧠 Smart replace (generic names only)", false);
-        JRadioButton customBtn = createStyledRadioButton("⚙️ Custom format...", false);
+        JRadioButton prefixNameBtn = createStyledRadioButton("🏷️ Prefix with conversion name", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratPrefixName());
+        JRadioButton prefixNoteBtn = createStyledRadioButton("📝 Prefix with conversion note", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratPrefixNote());
+        JRadioButton suffixNameBtn = createStyledRadioButton("🏷️➡️ Suffix with conversion name", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratSuffixName());
+        JRadioButton suffixNoteBtn = createStyledRadioButton("📝➡️ Suffix with conversion note", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratSuffixNote());
+        JRadioButton replaceNoteBtn = createStyledRadioButton("📝 Rename to conversion note", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratReplaceNote());
+        JRadioButton noteNumberBtn = createStyledRadioButton("📝🔢 Note + Number", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratNoteNumber());
+        JRadioButton replaceBtn = createStyledRadioButton("🔄 Replace entire filename (classic)", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratReplace());
+        JRadioButton smartReplaceBtn = createStyledRadioButton("🧠 Smart replace (generic names only)", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratSmartReplace());
+        JRadioButton customBtn = createStyledRadioButton("⚙️ Custom format...", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isStratCustom());
 
         // Enhanced tooltips with better formatting
         prefixNameBtn.setToolTipText("<html><b>Prefix with Conversion Name</b><br/>Example: 'Smith Family - IMG001.jpg'<br/>Best for: Most digitization workflows</html>");
@@ -1479,8 +1479,8 @@ public class ConversionPanel extends JPanel {
                 strategyPanel.add(customBtn);
 
         // Custom format field with modern styling
-        JTextField customFormatField = new JTextField("{conversion_name} - {original_name}");
-        customFormatField.setEnabled(false);
+        JTextField customFormatField = new JTextField(com.thevideogoat.digitizingassistant.data.Preferences.getInstance().getStratCustomFormat());
+        customFormatField.setEnabled(customBtn.isSelected());
         customFormatField.setFont(new Font("Consolas", Font.PLAIN, 12));
         customFormatField.setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(new Color(200, 200, 200)),
@@ -1513,24 +1513,25 @@ public class ConversionPanel extends JPanel {
         // slightly tighter spacing to prevent cropping
         ogbc.insets = new Insets(6, 4, 6, 8);
 
-        JCheckBox includeSubdirs = createStyledCheckBox("📁 Include files in subdirectories", false);
+        JCheckBox includeSubdirs = createStyledCheckBox("📁 Include files in subdirectories", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isRenameIncludeSubdirs());
         includeSubdirs.setToolTipText("<html><b>Include Subdirectories</b><br/>Also rename files inside linked folders<br/>Use when: Conversions link to directories</html>");
 
-        JCheckBox useSequential = createStyledCheckBox("🔢 Use sequential numbers (001, 002, 003...)", false);
+        JCheckBox useSequential = createStyledCheckBox("🔢 Use sequential numbers (001, 002, 003...)", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isRenameUseSequential());
         useSequential.setToolTipText("<html><b>Sequential Numbering</b><br/>Replace original numbering with sequence<br/>Result: Consistent numbering regardless of original names</html>");
 
-        JCheckBox addDate = createStyledCheckBox("📅 Add date prefix", false);
+        JCheckBox addDate = createStyledCheckBox("📅 Add date prefix", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isRenameAddDate());
         addDate.setToolTipText("<html><b>Date Prefix</b><br/>Add current date to beginning of filenames<br/>Example: '2024-01-15 - Smith Family - IMG001.jpg'</html>");
 
         // New: ignore/delete system files options
-        JCheckBox ignoreSystemFiles = createStyledCheckBox("🛡️ Ignore system files (.DS_Store, Thumbs.db, etc.)", true);
-        JCheckBox deleteIgnored = createStyledCheckBox("🗑️ Delete ignored system files", false);
+        JCheckBox ignoreSystemFiles = createStyledCheckBox("🛡️ Ignore system files (.DS_Store, Thumbs.db, etc.)", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isRenameIgnoreSystemFiles());
+        JCheckBox deleteIgnored = createStyledCheckBox("🗑️ Delete ignored system files", com.thevideogoat.digitizingassistant.data.Preferences.getInstance().isRenameDeleteIgnored());
 
         JLabel separatorLabel = new JLabel("Separator:");
         separatorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         JComboBox<String> separatorCombo = new JComboBox<>(new String[]{" - ", "_", " ", "."});
         separatorCombo.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         separatorCombo.setToolTipText("<html><b>Separator Character</b><br/>Character(s) to separate conversion info from filename<br/>Example: 'Smith Family - IMG001.jpg' vs 'Smith Family_IMG001.jpg'</html>");
+        separatorCombo.setSelectedItem(com.thevideogoat.digitizingassistant.data.Preferences.getInstance().getRenameSeparator());
 
         ogbc.gridx = 0; ogbc.gridy = 0; ogbc.gridwidth = 2;
         optionsPanel.add(includeSubdirs, ogbc);
@@ -1755,6 +1756,25 @@ public class ConversionPanel extends JPanel {
                     JOptionPane.WARNING_MESSAGE);
                 return;
             }
+
+            // Persist chosen options
+            com.thevideogoat.digitizingassistant.data.Preferences prefs = com.thevideogoat.digitizingassistant.data.Preferences.getInstance();
+            prefs.setStratPrefixName(prefixNameBtn.isSelected());
+            prefs.setStratPrefixNote(prefixNoteBtn.isSelected());
+            prefs.setStratSuffixName(suffixNameBtn.isSelected());
+            prefs.setStratSuffixNote(suffixNoteBtn.isSelected());
+            prefs.setStratReplaceNote(replaceNoteBtn.isSelected());
+            prefs.setStratNoteNumber(noteNumberBtn.isSelected());
+            prefs.setStratReplace(replaceBtn.isSelected());
+            prefs.setStratSmartReplace(smartReplaceBtn.isSelected());
+            prefs.setStratCustom(customBtn.isSelected());
+            prefs.setStratCustomFormat(customFormatField.getText());
+            prefs.setRenameIncludeSubdirs(includeSubdirs.isSelected());
+            prefs.setRenameUseSequential(useSequential.isSelected());
+            prefs.setRenameAddDate(addDate.isSelected());
+            prefs.setRenameIgnoreSystemFiles(ignoreSystemFiles.isSelected());
+            prefs.setRenameDeleteIgnored(deleteIgnored.isSelected());
+            prefs.setRenameSeparator((String) separatorCombo.getSelectedItem());
 
             // Confirm rename operation
             int confirm = JOptionPane.showConfirmDialog(dialog,

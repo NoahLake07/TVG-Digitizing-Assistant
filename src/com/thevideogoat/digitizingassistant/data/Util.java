@@ -339,7 +339,7 @@ public class Util {
                     // Rename files INSIDE the directory (keep directory name)
                     renamedCount += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote, 
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote, 
-                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber);
+                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber, conversion);
                 } else {
                     // Rename the DIRECTORY itself
                     String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
@@ -369,7 +369,9 @@ public class Util {
                     replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
                 
                 if (!newName.equals(file.getName())) {
-                    renameFile(file, newName);
+                    File newFile = renameFile(file, newName);
+                    // Update linked file references to point to new file path
+                    updateLinkedFileReferences(conversion, file, newFile);
                     renamedCount++;
                 }
                 
@@ -396,7 +398,7 @@ public class Util {
     private static int renameFilesInDirectoryAdvanced(File directory, String conversionName, String conversionNote,
             String separator, String datePrefix, boolean prefixName, boolean prefixNote,
             boolean suffixName, boolean suffixNote, boolean replace, boolean smartReplace,
-            boolean custom, String customFormat, boolean includeSubdirectories, boolean useSequential, int startSequence) {
+            boolean custom, String customFormat, boolean includeSubdirectories, boolean useSequential, int startSequence, Conversion conversion) {
         
         File[] files = directory.listFiles();
         if (files == null) return 0;
@@ -413,7 +415,7 @@ public class Util {
                 if (includeSubdirectories) {
                     count += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote,
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber);
+                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber, conversion);
                 }
                 // Note: We don't rename the directory itself, only files
             } else {
@@ -447,7 +449,9 @@ public class Util {
                 usedNames.add(finalName);
                 
                 if (!finalName.equals(file.getName())) {
-                    renameFile(file, finalName);
+                    File newFile = renameFile(file, finalName);
+                    // Update linked file references to point to new file path
+                    updateLinkedFileReferences(conversion, file, newFile);
                     count++;
                 }
                 
