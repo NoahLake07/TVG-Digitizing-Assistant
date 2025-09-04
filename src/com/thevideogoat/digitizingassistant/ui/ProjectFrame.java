@@ -960,13 +960,14 @@ public class ProjectFrame extends JFrame {
     }
 
     public void saveProject() {
-        // Save the current conversion if one is selected
+        // Capture currently displayed conversion for reselection after sort/refresh
+        Conversion currentConversion = null;
         if (detailsPanel.getComponentCount() > 0 && 
             detailsPanel.getComponent(0) instanceof JScrollPane &&
             ((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView() instanceof ConversionPanel) {
             ConversionPanel currentPanel = (ConversionPanel)((JScrollPane)detailsPanel.getComponent(0)).getViewport().getView();
-            // Instead of clicking the save button, directly update the conversion
             currentPanel.updateConversion();
+            currentConversion = currentPanel.conversion;
         }
 
         project.saveToFile(DigitizingAssistant.PROJECTS_DIRECTORY.toPath());
@@ -974,7 +975,11 @@ public class ProjectFrame extends JFrame {
         // Auto-sort conversions after saving using current dropdown selection
         String currentSortBy = sortByDropdown.getSelectedItem().toString();
         project.setConversions(Util.sortConversionsBy(project.getConversions(), currentSortBy));
-        refreshConversionList();
+        if (currentConversion != null) {
+            refreshConversionListAndReselect(currentConversion);
+        } else {
+            refreshConversionList();
+        }
         
         updateButtonColors();
         updateStatusBar();

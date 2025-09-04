@@ -359,6 +359,10 @@ public class Util {
                     }
                 }
             } else {
+                // Skip common system-level files proactively
+                if (isSystemLevelFile(file.getName())) {
+                    continue;
+                }
                 // Handle individual file renaming
                 String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                     separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
@@ -379,6 +383,14 @@ public class Util {
             "Advanced rename completed! Renamed " + renamedCount + " files.", 
             "Rename Success", 
             JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    public static boolean isSystemLevelFile(String name) {
+        String lower = name.toLowerCase();
+        return lower.equals(".ds_store") || lower.equals("thumbs.db") ||
+               lower.equals("desktop.ini") || lower.equals(".spotlight-v100") ||
+               lower.equals(".trashes") || lower.equals(".temporaryitems") ||
+               lower.startsWith("._");
     }
 
     private static int renameFilesInDirectoryAdvanced(File directory, String conversionName, String conversionNote,

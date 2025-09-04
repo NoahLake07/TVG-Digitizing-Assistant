@@ -27,7 +27,7 @@ public class DigitizingAssistant {
     public static final String CURRENT_DIRECTORY = System.getProperty("user.home");
     public static final File PROJECTS_DIRECTORY;
     public static final String OS = System.getProperty("os.name").toLowerCase();
-    public static final String VERSION = "1.6.2";
+    public static final String VERSION = "1.6.3";
 
     private static DigitizingAssistant instance;
 
@@ -502,7 +502,7 @@ public class DigitizingAssistant {
         }
 
         if (showWelcome) {
-            // Show welcome message for version 1.6.2
+            // Show welcome message for version 1.6.3
             JPanel welcomePanel = new JPanel(new BorderLayout(10, 10));
             welcomePanel.setBackground(Color.WHITE);
             welcomePanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
@@ -526,17 +526,13 @@ public class DigitizingAssistant {
             contentPanel.add(Box.createVerticalStrut(10));
             
             String[] features = {
-                "• Smart Renaming Analysis: Automatically categorize and recommend renaming strategies",
-                "• Hybrid Conversion Detection: Identify CDs with mixed video and data content",
-                "• Export Tracking: Track which conversions have been exported and when",
-                "• Enhanced Damage Management: Track damage events with timestamps and notes",
-                "• New Damage Statuses: 'Damage Fixed' and 'Damage Irreversible' options",
-                "• Advanced Export Capabilities: Digitizing sheets and comprehensive file maps",
-                "• Smart Damage Panel: Only appears when damage is detected or recorded",
-                "• Directory Exploration: File map export now explores directories recursively",
-                "• Timestamp Preservation: Fixed conversion dates/times reset issue",
-                "• Professional Reports: Client, archival, and technician export versions",
-                "• Improved UI: Better contrast and streamlined damage workflow"
+                "• Seamless bracket navigation after Save ([ and ] continue)",
+                "• Date/Time persistence – no silent overwrites",
+                "• Advanced Rename: live preview on every change",
+                "• Ignore system files (.DS_Store, Thumbs.db) with optional delete",
+                "• Relink Files: find by note, title, or *_trimmed; confirm and link",
+                "• Client CSV matches the return-sheet format",
+                "• UI polish in rename options and lists"
             };
             
             for (String feature : features) {
@@ -550,10 +546,9 @@ public class DigitizingAssistant {
             contentPanel.add(Box.createVerticalStrut(15));
             
             // Note about new capabilities
-            JLabel noteLabel = new JLabel("<html><body style='width: 450px'>" +
-                "<b>Intelligent Workflow Automation:</b> Version 1.6.2 introduces smart renaming analysis and export tracking for maximum technician efficiency. " +
-                "Automatically categorize conversions as video, data, or hybrid content, with detailed recommendations for processing workflows. " +
-                "Track export history to avoid duplicate work and maintain complete audit trails for professional digitization projects.</body></html>");
+            JLabel noteLabel = new JLabel("<html><body style='width: 480px'>" +
+                "<b>Technician productivity upgrades:</b> Version 1.6.3 streamlines daily tasks with reliable timestamps, faster navigation, live previews, and rapid relinking of trimmed media. " +
+                "Return-sheet exports now match the client CSV format used at delivery.</body></html>");
             noteLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
             noteLabel.setForeground(Color.BLACK);
             contentPanel.add(noteLabel);

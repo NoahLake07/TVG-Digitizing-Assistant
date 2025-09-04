@@ -1,10 +1,6 @@
 package com.thevideogoat.digitizingassistant.ui;
 
-import com.thevideogoat.digitizingassistant.data.Conversion;
-import com.thevideogoat.digitizingassistant.data.ConversionStatus;
-import com.thevideogoat.digitizingassistant.data.Type;
-import com.thevideogoat.digitizingassistant.data.Util;
-import com.thevideogoat.digitizingassistant.data.Preferences;
+import com.thevideogoat.digitizingassistant.data.*;
 
 import javax.swing.*;
 import javax.swing.border.BevelBorder;
@@ -27,8 +23,8 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 
+import static com.thevideogoat.digitizingassistant.data.Util.isSystemLevelFile;
 import static java.util.Objects.requireNonNullElse;
-import com.thevideogoat.digitizingassistant.data.FileReference;
 
 public class ConversionPanel extends JPanel {
 
@@ -458,6 +454,11 @@ public class ConversionPanel extends JPanel {
         Theme.styleButton(renameOptionsBtn);
         renameOptionsBtn.addActionListener(e -> showAdvancedRenameDialog());
 
+        // Relink files button
+        JButton relinkBtn = new JButton("Relink Files");
+        Theme.styleButton(relinkBtn);
+        relinkBtn.addActionListener(e -> showRelinkDialog());
+
         // Quick Rename to Note button
         JButton renameToNoteBtn = new JButton("Rename to Note");
         Theme.styleButton(renameToNoteBtn);
@@ -476,6 +477,8 @@ public class ConversionPanel extends JPanel {
         filesButtonRow.add(renameOptionsBtn);
         filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(showFileMapBtn);
+        filesButtonRow.add(Box.createHorizontalStrut(10));
+        filesButtonRow.add(relinkBtn);
         filesButtonRow.add(Box.createHorizontalStrut(10));
         filesButtonRow.add(addFileBtn);
 
@@ -535,26 +538,36 @@ public class ConversionPanel extends JPanel {
         timeRow.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
 
         try {
-            SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
-            hhSpinner = new JSpinner(hhModel);
-            if (conversion.timeOfConversion.hour != null)
-                hhSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getHour()));
-            SpinnerNumberModel minModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getMinute()), 0, 59, 1);
-            minSpinner = new JSpinner(minModel);
-
-            JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
-            minSpinner.setEditor(editor);
-            if (conversion.timeOfConversion.minute != null)
-                minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
+            if (conversion.timeOfConversion == null) {
+                // Create spinners with sensible defaults, but do not set conversion's value
+                SpinnerNumberModel hhModel = new SpinnerNumberModel(12, 1, 12, 1);
+                hhSpinner = new JSpinner(hhModel);
+                SpinnerNumberModel minModel = new SpinnerNumberModel(0, 0, 59, 1);
+                minSpinner = new JSpinner(minModel);
+                amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
+            } else {
+                SpinnerNumberModel hhModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getHour()), 1, 12, 1);
+                hhSpinner = new JSpinner(hhModel);
+                if (conversion.timeOfConversion.hour != null)
+                    hhSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getHour()));
+                SpinnerNumberModel minModel = new SpinnerNumberModel(Integer.parseInt(conversion.timeOfConversion.getMinute()), 0, 59, 1);
+                minSpinner = new JSpinner(minModel);
+                JSpinner.NumberEditor editor = new JSpinner.NumberEditor(minSpinner, "00");
+                minSpinner.setEditor(editor);
+                if (conversion.timeOfConversion.minute != null)
+                    minSpinner.setValue(Integer.parseInt(conversion.timeOfConversion.getMinute()));
+                timeRow.add(hhSpinner);
+                timeRow.add(minSpinner);
+                amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
+                amPmSelector.setPreferredSize(new Dimension(70, 30));
+                amPmSelector.setBackground(Color.WHITE);
+                amPmSelector.setForeground(Color.BLACK);
+                if (conversion.timeOfConversion.getAmPm() != null) {
+                    amPmSelector.setSelectedItem(conversion.timeOfConversion.getAmPm());
+                }
+            }
             timeRow.add(hhSpinner);
             timeRow.add(minSpinner);
-            amPmSelector = new JComboBox<>(new String[]{"AM", "PM"});
-            amPmSelector.setPreferredSize(new Dimension(70, 30));
-            amPmSelector.setBackground(Color.WHITE);
-            amPmSelector.setForeground(Color.BLACK);
-            if (conversion.timeOfConversion.getAmPm() != null) {
-                amPmSelector.setSelectedItem(conversion.timeOfConversion.getAmPm());
-            }
             timeRow.add(amPmSelector);
         } catch (NumberFormatException e) {
             SpinnerNumberModel hhModel = new SpinnerNumberModel(12, 1, 12, 1);
@@ -826,6 +839,13 @@ public class ConversionPanel extends JPanel {
     }
 
     private void setupDateTimeSpinners(){
+        // Ensure we have non-null date/time objects to avoid NPEs when loading older JSONs
+        if (conversion.dateOfConversion == null) {
+            conversion.dateOfConversion = new Date();
+        }
+        if (conversion.timeOfConversion == null) {
+            conversion.timeOfConversion = new Time();
+        }
         try {
             // Month Spinner
             if(mmSpinner == null) {
@@ -1380,7 +1400,7 @@ public class ConversionPanel extends JPanel {
 
                         // Create main dialog with modern styling
                 JDialog dialog = new JDialog((Frame) SwingUtilities.getWindowAncestor(this), "Advanced Rename Options", true);
-                dialog.setSize(700, 600);
+                dialog.setSize(950, 600);
                 dialog.setLocationRelativeTo(this);
                 dialog.setResizable(true);
                 dialog.setMinimumSize(new Dimension(650, 550));
@@ -1490,7 +1510,8 @@ public class ConversionPanel extends JPanel {
         optionsPanel.setLayout(new GridBagLayout());
         GridBagConstraints ogbc = new GridBagConstraints();
         ogbc.anchor = GridBagConstraints.WEST;
-        ogbc.insets = new Insets(8, 5, 8, 15);
+        // slightly tighter spacing to prevent cropping
+        ogbc.insets = new Insets(6, 4, 6, 8);
 
         JCheckBox includeSubdirs = createStyledCheckBox("📁 Include files in subdirectories", false);
         includeSubdirs.setToolTipText("<html><b>Include Subdirectories</b><br/>Also rename files inside linked folders<br/>Use when: Conversions link to directories</html>");
@@ -1501,10 +1522,14 @@ public class ConversionPanel extends JPanel {
         JCheckBox addDate = createStyledCheckBox("📅 Add date prefix", false);
         addDate.setToolTipText("<html><b>Date Prefix</b><br/>Add current date to beginning of filenames<br/>Example: '2024-01-15 - Smith Family - IMG001.jpg'</html>");
 
-        JLabel separatorLabel = new JLabel("🔗 Separator:");
-        separatorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        // New: ignore/delete system files options
+        JCheckBox ignoreSystemFiles = createStyledCheckBox("🛡️ Ignore system files (.DS_Store, Thumbs.db, etc.)", true);
+        JCheckBox deleteIgnored = createStyledCheckBox("🗑️ Delete ignored system files", false);
+
+        JLabel separatorLabel = new JLabel("Separator:");
+        separatorLabel.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         JComboBox<String> separatorCombo = new JComboBox<>(new String[]{" - ", "_", " ", "."});
-        separatorCombo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        separatorCombo.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         separatorCombo.setToolTipText("<html><b>Separator Character</b><br/>Character(s) to separate conversion info from filename<br/>Example: 'Smith Family - IMG001.jpg' vs 'Smith Family_IMG001.jpg'</html>");
 
         ogbc.gridx = 0; ogbc.gridy = 0; ogbc.gridwidth = 2;
@@ -1513,6 +1538,10 @@ public class ConversionPanel extends JPanel {
         optionsPanel.add(useSequential, ogbc);
         ogbc.gridy++;
         optionsPanel.add(addDate, ogbc);
+        ogbc.gridy++; 
+        optionsPanel.add(ignoreSystemFiles, ogbc);
+        ogbc.gridy++;
+        optionsPanel.add(deleteIgnored, ogbc);
         ogbc.gridy++; ogbc.gridwidth = 1;
         optionsPanel.add(separatorLabel, ogbc);
         ogbc.gridx = 1;
@@ -1620,6 +1649,9 @@ public class ConversionPanel extends JPanel {
                 } else {
                     // Single file preview
                     String originalName = fileRef.getName();
+                    if (ignoreSystemFiles.isSelected() && isSystemLevelFile(originalName)) {
+                        continue;
+                    }
                     String newName = generatePreviewName(originalName, separator, prefix,
                         prefixNameBtn.isSelected(), prefixNoteBtn.isSelected(),
                         suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
@@ -1663,7 +1695,7 @@ public class ConversionPanel extends JPanel {
             }
         };
 
-        // Add listeners for preview updates
+        // Add listeners for preview updates (live)
         prefixNameBtn.addActionListener(e -> updatePreview.run());
         prefixNoteBtn.addActionListener(e -> updatePreview.run());
         suffixNameBtn.addActionListener(e -> updatePreview.run());
@@ -1689,6 +1721,9 @@ public class ConversionPanel extends JPanel {
         separatorCombo.addActionListener(e -> updatePreview.run());
         useSequential.addActionListener(e -> updatePreview.run());
         addDate.addActionListener(e -> updatePreview.run());
+        includeSubdirs.addActionListener(e -> updatePreview.run());
+        ignoreSystemFiles.addActionListener(e -> updatePreview.run());
+        deleteIgnored.addActionListener(e -> updatePreview.run());
 
         // Regular button panel with standard styling
                         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
@@ -1738,7 +1773,8 @@ public class ConversionPanel extends JPanel {
                     suffixNameBtn.isSelected(), suffixNoteBtn.isSelected(),
                     replaceNoteBtn.isSelected(), noteNumberBtn.isSelected(), replaceBtn.isSelected(), smartReplaceBtn.isSelected(),
                     customBtn.isSelected(), customFormatField.getText(),
-                    includeSubdirs.isSelected(), useSequential.isSelected()
+                    includeSubdirs.isSelected(), useSequential.isSelected(),
+                    ignoreSystemFiles.isSelected(), deleteIgnored.isSelected()
                 );
                 dialog.dispose();
             }
@@ -1879,9 +1915,11 @@ public class ConversionPanel extends JPanel {
                     prefixName, prefixNote, suffixName, suffixNote,
                     replaceNote, noteNumber, replace, smartReplace, custom, customFormat,
                     useSequential, sequenceNumber);
-                
+
                 DefaultMutableTreeNode fileNode = new DefaultMutableTreeNode(
                     icon + " " + originalName + " → " + newName);
+                // Store original and proposed names for future overrides
+                fileNode.setUserObject(new FileData(originalName, newName, ""));
                 parentNode.add(fileNode);
                 fileCount++;
                 
@@ -1962,12 +2000,16 @@ public class ConversionPanel extends JPanel {
     private void executeAdvancedRename(String separator, boolean addDate,
             boolean prefixName, boolean prefixNote, boolean suffixName, boolean suffixNote,
             boolean replaceNote, boolean noteNumber, boolean replace, boolean smartReplace, boolean custom, String customFormat,
-            boolean includeSubdirs, boolean useSequential) {
+            boolean includeSubdirs, boolean useSequential, boolean ignoreSystemFiles, boolean deleteIgnored) {
         
         try {
             // Convert FileReferences to Files for the rename operation
             ArrayList<File> filesToRename = new ArrayList<>();
             for (FileReference fileRef : conversion.linkedFiles) {
+                // Optionally skip system-level files
+                if (ignoreSystemFiles && isSystemLevelFile(fileRef.getName())) {
+                    continue;
+                }
                 filesToRename.add(fileRef.getFile());
             }
             
@@ -1998,6 +2040,15 @@ public class ConversionPanel extends JPanel {
                 includeSubdirs, useSequential,
                 conversion
             );
+
+            // Optionally delete ignored system files from disk
+            if (ignoreSystemFiles && deleteIgnored) {
+                for (FileReference fileRef : conversion.linkedFiles) {
+                    if (isSystemLevelFile(fileRef.getName())) {
+                        try { fileRef.getFile().delete(); } catch (Exception ignore) {}
+                    }
+                }
+            }
             
             updateLinkedFiles();
             projectFrame.markUnsavedChanges();
@@ -2010,6 +2061,82 @@ public class ConversionPanel extends JPanel {
         }
     }
 
+    private void showRelinkDialog() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Choose folder to search for media");
+        String lastDir = com.thevideogoat.digitizingassistant.data.Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir != null && new java.io.File(lastDir).exists()) {
+            chooser.setCurrentDirectory(new java.io.File(lastDir));
+        }
+        int result = chooser.showOpenDialog(this);
+        if (result != JFileChooser.APPROVE_OPTION) return;
+        File root = chooser.getSelectedFile();
+        if (root != null && root.exists()) {
+            com.thevideogoat.digitizingassistant.data.Preferences.getInstance().setLastUsedDirectory(root.getAbsolutePath());
+        }
+
+        JCheckBox byNote = new JCheckBox("Match conversion note", true);
+        JCheckBox byTitle = new JCheckBox("Match conversion title", true);
+        JCheckBox byTrimmed = new JCheckBox("Match trimmed filenames (_trimmed)", true);
+
+        JPanel opts = new JPanel(new GridLayout(0,1));
+        opts.add(byNote); opts.add(byTitle); opts.add(byTrimmed);
+
+        int ok = JOptionPane.showConfirmDialog(this, opts, "Relink Search Options", JOptionPane.OK_CANCEL_OPTION);
+        if (ok != JOptionPane.OK_OPTION) return;
+
+        java.util.List<File> matches = new java.util.ArrayList<>();
+        java.util.function.Predicate<File> predicate = f -> {
+            String n = f.getName().toLowerCase();
+            boolean m = false;
+            if (byNote.isSelected() && conversion.note != null && !conversion.note.isBlank()) {
+                m |= n.contains(conversion.note.toLowerCase());
+            }
+            if (byTitle.isSelected()) {
+                m |= n.contains(conversion.name.toLowerCase());
+            }
+            if (byTrimmed.isSelected()) {
+                String base = conversion.name.toLowerCase();
+                m |= n.startsWith(base + "_") && n.contains("trimmed");
+            }
+            return m;
+        };
+
+        java.util.Deque<File> stack = new java.util.ArrayDeque<>();
+        stack.push(root);
+        while(!stack.isEmpty()){
+            File dir = stack.pop();
+            File[] list = dir.listFiles();
+            if (list == null) continue;
+            for (File f : list) {
+                if (f.isDirectory()) stack.push(f);
+                if (predicate.test(f)) matches.add(f);
+            }
+        }
+
+        if (matches.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No matching files found.", "Relink", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        JList<File> list = new JList<>(matches.toArray(new File[0]));
+        list.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        JScrollPane sp = new JScrollPane(list);
+        sp.setPreferredSize(new Dimension(600, 300));
+        int choose = JOptionPane.showConfirmDialog(this, sp, "Select files to link", JOptionPane.OK_CANCEL_OPTION);
+        if (choose != JOptionPane.OK_OPTION) return;
+
+        java.util.List<File> selected = list.getSelectedValuesList();
+        if (selected == null || selected.isEmpty()) return;
+        if (conversion.linkedFiles == null) conversion.linkedFiles = new ArrayList<>();
+        for (File f : selected) {
+            conversion.linkedFiles.add(new FileReference(f.getAbsolutePath()));
+        }
+        updateLinkedFiles();
+        projectFrame.markUnsavedChanges();
+    }
+
     // Helper methods for modern UI styling
     private JPanel createModernPanel(String title, Color backgroundColor) {
         JPanel panel = new JPanel();
@@ -2019,7 +2146,7 @@ public class ConversionPanel extends JPanel {
 
     private JRadioButton createStyledRadioButton(String text, boolean selected) {
         JRadioButton button = new JRadioButton(text, selected);
-        button.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        button.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         button.setBackground(Color.WHITE);
         button.setForeground(new Color(60, 60, 60));
         button.setFocusPainted(false);
@@ -2029,7 +2156,7 @@ public class ConversionPanel extends JPanel {
 
     private JCheckBox createStyledCheckBox(String text, boolean selected) {
         JCheckBox checkBox = new JCheckBox(text, selected);
-        checkBox.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        checkBox.setFont(new Font("Segoe UI", Font.PLAIN, 11));
         checkBox.setBackground(Color.WHITE);
         checkBox.setForeground(new Color(60, 60, 60));
         checkBox.setFocusPainted(false);

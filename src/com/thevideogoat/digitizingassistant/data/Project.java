@@ -110,6 +110,9 @@ public class Project implements Serializable {
                         // Date constructor expects (day, month, year) but toString() returns "MM/DD/YYYY"
                         conversion.dateOfConversion = new Date(dateParts[1], dateParts[0], dateParts[2]);
                     }
+                } else {
+                    // Do not assign "now" when absent in JSON; leave null
+                    conversion.dateOfConversion = null;
                 }
                 
                 if (conversionJson.has("timeOfConversion")) {
@@ -122,6 +125,8 @@ public class Project implements Serializable {
                             conversion.timeOfConversion = new Time(hourMin[0], hourMin[1], timeParts[1]);
                         }
                     }
+                } else {
+                    conversion.timeOfConversion = null;
                 }
                 
                 if (conversionJson.has("isDataOnly")) {
