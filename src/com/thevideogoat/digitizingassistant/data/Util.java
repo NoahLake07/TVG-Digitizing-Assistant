@@ -64,6 +64,18 @@ public class Util {
         boolean success = file.renameTo(newFile);
         if (!success) {
             System.err.println("Error: Failed to rename file from " + file.getAbsolutePath() + " to " + newFile.getAbsolutePath());
+            System.err.println("Possible causes: File in use, insufficient permissions, invalid filename, or target already exists");
+            
+            // Check if target already exists
+            if (newFile.exists()) {
+                System.err.println("Target file already exists: " + newFile.getAbsolutePath());
+            }
+            
+            // Check file permissions
+            if (!file.canWrite()) {
+                System.err.println("Source file is not writable: " + file.getAbsolutePath());
+            }
+            
             return file;
         }
         
@@ -871,7 +883,62 @@ public class Util {
             return originalName; // No strategy selected, keep original
         }
 
-        return result + extension;
+        String finalFilename = sanitizeFilename(result + extension);
+        if (!finalFilename.equals(result + extension)) {
+            System.out.println("DEBUG: Filename sanitized from '" + (result + extension) + "' to '" + finalFilename + "'");
+        }
+        return finalFilename;
+    }
+    
+    /**
+     * Sanitizes a filename by removing or replacing characters that are not allowed in filenames.
+     * Uses intelligent replacements that preserve meaning and readability.
+     * 
+     * @param filename The filename to sanitize
+     * @return The sanitized filename
+     */
+    private static String sanitizeFilename(String filename) {
+        if (filename == null) return "";
+        
+        String sanitized = filename;
+        
+        // Intelligent character replacements that preserve meaning
+        sanitized = sanitized
+            .replace("\"", "")                    // Remove quotes entirely (they're often decorative)
+            .replace("'", "")                     // Remove single quotes
+            .replace(":", " - ")                  // Replace colons with dash (often indicates time/separation)
+            .replace(",", " - ")                  // Replace commas with dash (better than underscore)
+            .replace(";", " - ")                  // Replace semicolons with dash
+            .replace("<", "(")                    // Replace < with ( (preserve bracket meaning)
+            .replace(">", ")")                    // Replace > with ) (preserve bracket meaning)
+            .replace("/", "-")                    // Replace forward slash with dash
+            .replace("\\", "-")                   // Replace backslash with dash
+            .replace("|", "-")                    // Replace pipe with dash
+            .replace("?", "")                     // Remove question marks
+            .replace("*", "")                     // Remove asterisks
+            .replaceAll("\\s+", " ")              // Replace multiple spaces with single space
+            .trim();                              // Remove leading/trailing spaces
+        
+        // Remove leading/trailing dots and spaces (Windows doesn't allow these)
+        sanitized = sanitized.replaceAll("^[.\\s]+|[.\\s]+$", "");
+        
+        // Clean up any double dashes that might have been created
+        sanitized = sanitized.replaceAll("-+", "-");
+        
+        // Remove leading/trailing dashes
+        sanitized = sanitized.replaceAll("^-+|-+$", "");
+        
+        // Ensure filename is not empty
+        if (sanitized.isEmpty()) {
+            sanitized = "renamed_file";
+        }
+        
+        // Limit filename length (Windows has a 255 character limit for filenames)
+        if (sanitized.length() > 200) { // Leave some room for extension
+            sanitized = sanitized.substring(0, 200);
+        }
+        
+        return sanitized;
     }
 
     private static boolean isGenericFilename(String filename) {
