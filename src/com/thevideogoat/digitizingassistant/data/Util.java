@@ -21,13 +21,13 @@ public class Util {
         if (newName.toLowerCase().endsWith(extension.toLowerCase())) {
             // newName already has the extension, don't add it again
             File newFile = new File(file.getParentFile(), newName);
-            file.renameTo(newFile);
-            return newFile;
+            boolean success = file.renameTo(newFile);
+            return success ? newFile : file; // Return original file if rename failed
         } else {
             // Add the extension to newName
             File newFile = new File(file.getParentFile(), newName + extension);
-            file.renameTo(newFile);
-            return newFile;
+            boolean success = file.renameTo(newFile);
+            return success ? newFile : file; // Return original file if rename failed
         }
     }
 
@@ -333,6 +333,9 @@ public class Util {
         int sequenceNumber = 1;
         String datePrefix = addDate ? java.time.LocalDate.now().toString() + separator : "";
 
+        // Track used names per parent directory to avoid collisions across the batch
+        java.util.Map<File, java.util.Set<String>> dirToUsedNames = new java.util.HashMap<>();
+
         for (File file : files) {
             if (file.isDirectory()) {
                 if (includeSubdirectories) {
@@ -348,10 +351,12 @@ public class Util {
                     
                     if (!newName.equals(file.getName())) {
                         File newFile = renameFile(file, newName);
-                        renamedCount++;
-                        
-                        // Update linked file references to point to new directory path
-                        updateLinkedFileReferences(conversion, file, newFile);
+                        if (newFile != file) {
+                            renamedCount++;
+                            
+                            // Update linked file references to point to new directory path
+                            updateLinkedFileReferences(conversion, file, newFile);
+                        }
                     }
                     
                     if (useSequential) {
@@ -368,11 +373,34 @@ public class Util {
                     separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
                     replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
                 
-                if (!newName.equals(file.getName())) {
-                    File newFile = renameFile(file, newName);
-                    // Update linked file references to point to new file path
-                    updateLinkedFileReferences(conversion, file, newFile);
-                    renamedCount++;
+                // Ensure uniqueness in the target directory, even if useSequential is off
+                File parentDir = file.getParentFile();
+                java.util.Set<String> used = dirToUsedNames.computeIfAbsent(parentDir, d -> new java.util.HashSet<>());
+                String candidate = newName;
+                String base = candidate;
+                String ext = "";
+                int dotIdx = candidate.lastIndexOf('.');
+                if (dotIdx > 0) {
+                    base = candidate.substring(0, dotIdx);
+                    ext = candidate.substring(dotIdx);
+                }
+                int conflictCounter = 1;
+                while (used.contains(candidate) || new File(parentDir, candidate).exists()) {
+                    // Strip existing numbering like " (1)" or " (001)"
+                    String cleanBase = base.replaceAll(" \\((?:\\d+|\\d{3})\\)$", "");
+                    String suffix = useSequential ? String.format(" (%03d)", conflictCounter) : " (" + conflictCounter + ")";
+                    candidate = cleanBase + suffix + ext;
+                    conflictCounter++;
+                }
+
+                if (!candidate.equals(file.getName())) {
+                    File newFile = renameFile(file, candidate);
+                    if (newFile != file) {
+                        // Update linked file references to point to new file path
+                        updateLinkedFileReferences(conversion, file, newFile);
+                        renamedCount++;
+                        used.add(candidate);
+                    }
                 }
                 
                 if (useSequential) {
