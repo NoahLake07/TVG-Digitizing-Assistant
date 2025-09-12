@@ -457,6 +457,10 @@ public class Util {
         int renamedCount = 0;
         int errorCount = 0;
         String datePrefix = addDate ? java.time.LocalDate.now().toString() + separator : "";
+        
+        // Track used names to prevent conflicts across all files
+        java.util.Set<String> usedNames = new java.util.HashSet<>();
+        int sequenceNumber = 1;
 
         // Process each file individually and handle conflicts as they come
         for (File file : files) {
@@ -472,10 +476,34 @@ public class Util {
                         // Rename the DIRECTORY itself
                         String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                             separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                            replace, smartReplace, custom, customFormat, useSequential, 1);
+                            replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
                         
-                        if (!newName.equals(file.getName())) {
-                            File newFile = renameFileWithConflictResolution(file, newName, useSequential);
+                        // Check for name conflicts and resolve them
+                        String finalName = newName;
+                        int conflictCounter = 1;
+                        while (usedNames.contains(finalName)) {
+                            // Extract base name and extension, removing any existing numbering
+                            String baseName = finalName;
+                            String extension = "";
+                            int dotIndex = finalName.lastIndexOf('.');
+                            if (dotIndex > 0) {
+                                baseName = finalName.substring(0, dotIndex);
+                                extension = finalName.substring(dotIndex);
+                            }
+                            
+                            // Remove any existing numbering pattern like " (1)", " (2)", etc.
+                            baseName = baseName.replaceAll(" \\(\\d+\\)$", "");
+                            
+                            // Add sequential number to resolve conflict
+                            finalName = baseName + " (" + conflictCounter + ")" + extension;
+                            conflictCounter++;
+                        }
+                        
+                        // Add to used names set
+                        usedNames.add(finalName);
+                        
+                        if (!finalName.equals(file.getName())) {
+                            File newFile = renameFileWithConflictResolution(file, finalName, useSequential);
                             if (newFile != file) {
                                 renamedCount++;
                                 // Update linked file references to point to new directory path
@@ -484,6 +512,10 @@ public class Util {
                                 errorCount++;
                                 System.err.println("Failed to rename directory: " + file.getAbsolutePath());
                             }
+                        }
+                        
+                        if (useSequential) {
+                            sequenceNumber++;
                         }
                     }
                 } else {
@@ -495,10 +527,38 @@ public class Util {
                     // Handle individual file renaming
                     String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                        replace, smartReplace, custom, customFormat, useSequential, 1);
+                        replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
                     
-                    if (!newName.equals(file.getName())) {
-                        File newFile = renameFileWithConflictResolution(file, newName, useSequential);
+                    // Check for name conflicts and resolve them
+                    String finalName = newName;
+                    int conflictCounter = 1;
+                    while (usedNames.contains(finalName)) {
+                        System.out.println("DEBUG: Name conflict detected: " + finalName + " already used, resolving...");
+                        // Extract base name and extension, removing any existing numbering
+                        String baseName = finalName;
+                        String extension = "";
+                        int dotIndex = finalName.lastIndexOf('.');
+                        if (dotIndex > 0) {
+                            baseName = finalName.substring(0, dotIndex);
+                            extension = finalName.substring(dotIndex);
+                        }
+                        
+                        // Remove any existing numbering pattern like " (1)", " (2)", etc.
+                        baseName = baseName.replaceAll(" \\(\\d+\\)$", "");
+                        
+                        // Add sequential number to resolve conflict
+                        finalName = baseName + " (" + conflictCounter + ")" + extension;
+                        System.out.println("DEBUG: Resolved to: " + finalName);
+                        conflictCounter++;
+                    }
+                    
+                    // Add to used names set
+                    usedNames.add(finalName);
+                    
+                    System.out.println("DEBUG: Renaming " + file.getName() + " to " + finalName);
+                    
+                    if (!finalName.equals(file.getName())) {
+                        File newFile = renameFileWithConflictResolution(file, finalName, useSequential);
                         if (newFile != file) {
                             // Update linked file references to point to new file path
                             updateLinkedFileReferences(conversion, file, newFile);
@@ -507,6 +567,10 @@ public class Util {
                             errorCount++;
                             System.err.println("Failed to rename file: " + file.getAbsolutePath());
                         }
+                    }
+                    
+                    if (useSequential) {
+                        sequenceNumber++;
                     }
                 }
             } catch (Exception e) {
