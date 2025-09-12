@@ -323,18 +323,22 @@ public class ProjectFrame extends JFrame {
                     for (Conversion c : project.getConversions()) {
                         if (!c.linkedFiles.isEmpty()) {
                             ArrayList<FileReference> originalFiles = new ArrayList<>(c.linkedFiles);
-                                                    Util.renameFilesWithOptionsFromReferences(
-                            c.linkedFiles,
-                            c.name,
-                            includeSubdirs.isSelected(),
-                            preserveNumbering.isSelected()
-                        );
-                            updateLinkedFilesAfterRename(c, c.name);
-                            for (int i = 0; i < originalFiles.size(); i++) {
-                                logFileOperation("RENAME", 
-                                    "Original: " + originalFiles.get(i).getPath() + 
-                                    " → New: " + c.linkedFiles.get(i).getPath() +
-                                    " (Conversion: " + c.name + ")");
+                            int renamedCount = Util.renameFilesWithOptionsFromReferences(
+                                c.linkedFiles,
+                                c.name,
+                                includeSubdirs.isSelected(),
+                                preserveNumbering.isSelected(),
+                                c // Pass conversion for proper reference updates
+                            );
+                            
+                            if (renamedCount > 0) {
+                                // References are automatically updated by the rename method
+                                for (int i = 0; i < originalFiles.size() && i < c.linkedFiles.size(); i++) {
+                                    logFileOperation("RENAME", 
+                                        "Original: " + originalFiles.get(i).getPath() + 
+                                        " → New: " + c.linkedFiles.get(i).getPath() +
+                                        " (Conversion: " + c.name + ")");
+                                }
                             }
                         }
                     }
@@ -343,18 +347,22 @@ public class ProjectFrame extends JFrame {
                     for (Conversion c : project.getConversions()) {
                         if (!c.linkedFiles.isEmpty() && !c.note.isEmpty()) {
                             ArrayList<FileReference> originalFiles = new ArrayList<>(c.linkedFiles);
-                            Util.renameFilesWithOptionsFromReferences(
+                            int renamedCount = Util.renameFilesWithOptionsFromReferences(
                                 c.linkedFiles,
                                 c.note,
                                 includeSubdirs.isSelected(),
-                                preserveNumbering.isSelected()
+                                preserveNumbering.isSelected(),
+                                c // Pass conversion for proper reference updates
                             );
-                            updateLinkedFilesAfterRename(c, c.note);
-                            for (int i = 0; i < originalFiles.size(); i++) {
-                                logFileOperation("RENAME", 
-                                    "Original: " + originalFiles.get(i).getPath() + 
-                                    " → New: " + c.linkedFiles.get(i).getPath() +
-                                    " (Conversion: " + c.name + ")");
+                            
+                            if (renamedCount > 0) {
+                                // References are automatically updated by the rename method
+                                for (int i = 0; i < originalFiles.size() && i < c.linkedFiles.size(); i++) {
+                                    logFileOperation("RENAME", 
+                                        "Original: " + originalFiles.get(i).getPath() + 
+                                        " → New: " + c.linkedFiles.get(i).getPath() +
+                                        " (Conversion: " + c.name + ")");
+                                }
                             }
                         }
                     }
@@ -366,25 +374,29 @@ public class ProjectFrame extends JFrame {
                         JOptionPane.PLAIN_MESSAGE);
                     if (newName != null && !newName.trim().isEmpty()) {
                         ArrayList<FileReference> originalFiles = new ArrayList<>(allFiles);
-                        // Convert FileReferences to Files for the rename operation
-                        ArrayList<File> filesToRename = new ArrayList<>();
-                        for (FileReference fileRef : allFiles) {
-                            filesToRename.add(fileRef.getFile());
-                        }
-                        Util.renameFilesWithOptions(
-                            filesToRename,
-                            newName,
-                            includeSubdirs.isSelected(),
-                            preserveNumbering.isSelected()
-                        );
-                        // Update all conversions' linkedFiles
+                        int totalRenamed = 0;
+                        
+                        // Rename files for each conversion individually to maintain proper references
                         for (Conversion c : project.getConversions()) {
-                            updateLinkedFilesAfterRename(c, newName);
+                            if (!c.linkedFiles.isEmpty()) {
+                                int renamedCount = Util.renameFilesWithOptionsFromReferences(
+                                    c.linkedFiles,
+                                    newName,
+                                    includeSubdirs.isSelected(),
+                                    preserveNumbering.isSelected(),
+                                    c // Pass conversion for proper reference updates
+                                );
+                                totalRenamed += renamedCount;
+                            }
                         }
-                        for (int i = 0; i < originalFiles.size(); i++) {
-                            logFileOperation("RENAME", 
-                                "Original: " + originalFiles.get(i).getPath() + 
-                                " → New: " + allFiles.get(i).getPath());
+                        
+                        if (totalRenamed > 0) {
+                            // Log the rename operations
+                            for (int i = 0; i < originalFiles.size() && i < allFiles.size(); i++) {
+                                logFileOperation("RENAME", 
+                                    "Original: " + originalFiles.get(i).getPath() + 
+                                    " → New: " + allFiles.get(i).getPath());
+                            }
                         }
                     }
                 }
@@ -1941,28 +1953,14 @@ public class ProjectFrame extends JFrame {
         }
     }
 
-    // Add these helper methods at the class level
+    // Legacy method for backward compatibility - now uses the improved Util method
     private void updateLinkedFilesAfterRename(Conversion c, String baseName) {
-        ArrayList<FileReference> updated = new ArrayList<>();
-        for (FileReference oldFile : c.linkedFiles) {
-            File dir = oldFile.getParentFile();
-            if (dir != null && dir.exists()) {
-                File[] files = dir.listFiles();
-                if (files != null) {
-                    for (File f : files) {
-                        String norm = normalizeFilename(f.getName());
-                        String baseNorm = normalizeFilename(baseName);
-                        if (norm.contains(baseNorm) && f.getName().endsWith(getExtension(oldFile))) {
-                            updated.add(new FileReference(f));
-                            break;
-                        }
-                    }
-                }
+        if (c.linkedFiles != null && !c.linkedFiles.isEmpty()) {
+            // Get the parent directory from the first linked file
+            File parentDir = c.linkedFiles.get(0).getParentFile();
+            if (parentDir != null) {
+                Util.updateLinkedFileReferencesAfterBatchRename(c, baseName, parentDir);
             }
-        }
-        if (!updated.isEmpty()) {
-            c.linkedFiles.clear();
-            c.linkedFiles.addAll(updated);
         }
     }
 
@@ -2703,7 +2701,16 @@ public class ProjectFrame extends JFrame {
         for (int i = 0; i < conversions.size(); i++) {
             Conversion conversion = conversions.get(i);
             String newName = (i + 1) + ".mp4";
-            updateLinkedFilesAfterRename(conversion, newName);
+            
+            if (!conversion.linkedFiles.isEmpty()) {
+                Util.renameFilesWithOptionsFromReferences(
+                    conversion.linkedFiles,
+                    newName,
+                    false, // Don't include subdirectories for video renaming
+                    false, // Don't preserve numbering
+                    conversion // Pass conversion for proper reference updates
+                );
+            }
         }
     }
     
@@ -2714,7 +2721,16 @@ public class ProjectFrame extends JFrame {
     private void executeDataRenaming(List<Conversion> conversions) {
         for (Conversion conversion : conversions) {
             String newName = conversion.note.isEmpty() ? conversion.name : conversion.note;
-            updateLinkedFilesAfterRename(conversion, newName);
+            
+            if (!conversion.linkedFiles.isEmpty()) {
+                Util.renameFilesWithOptionsFromReferences(
+                    conversion.linkedFiles,
+                    newName,
+                    false, // Don't include subdirectories for data renaming
+                    false, // Don't preserve numbering
+                    conversion // Pass conversion for proper reference updates
+                );
+            }
         }
     }
     
@@ -2722,14 +2738,32 @@ public class ProjectFrame extends JFrame {
         for (int i = 0; i < project.getConversions().size(); i++) {
             Conversion conversion = project.getConversions().get(i);
             String newName = baseName + "_" + (i + 1);
-            updateLinkedFilesAfterRename(conversion, newName);
+            
+            if (!conversion.linkedFiles.isEmpty()) {
+                Util.renameFilesWithOptionsFromReferences(
+                    conversion.linkedFiles,
+                    newName,
+                    false, // Don't include subdirectories for custom renaming
+                    false, // Don't preserve numbering
+                    conversion // Pass conversion for proper reference updates
+                );
+            }
         }
     }
     
     private void executeMixedRenaming(List<Conversion> conversions) {
         for (Conversion conversion : conversions) {
             String newName = conversion.name + "_Mixed";
-            updateLinkedFilesAfterRename(conversion, newName);
+            
+            if (!conversion.linkedFiles.isEmpty()) {
+                Util.renameFilesWithOptionsFromReferences(
+                    conversion.linkedFiles,
+                    newName,
+                    false, // Don't include subdirectories for mixed renaming
+                    false, // Don't preserve numbering
+                    conversion // Pass conversion for proper reference updates
+                );
+            }
         }
     }
 }

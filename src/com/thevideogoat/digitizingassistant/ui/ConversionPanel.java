@@ -1992,7 +1992,7 @@ public class ConversionPanel extends JPanel {
                 }
                 
                 // Use custom format with just the conversion note
-                Util.renameFilesWithAdvancedOptions(
+                int renamedCount = Util.renameFilesWithAdvancedOptions(
                     filesToRename,
                     conversion.name,
                     conversion.note,
@@ -2001,12 +2001,15 @@ public class ConversionPanel extends JPanel {
                     false, false, false, false, // No prefix/suffix
                     false, false, // No replace/smart replace
                     true, "{conversion_note}", // Custom format with conversion note
-                    false, false, // No subdirectories, no sequential
+                    false, true, // No subdirectories, but use sequential for conflicts
                     conversion
                 );
                 
-                updateLinkedFiles();
-                projectFrame.markUnsavedChanges();
+                if (renamedCount > 0) {
+                    // References are automatically updated by the rename method
+                    updateLinkedFiles();
+                    projectFrame.markUnsavedChanges();
+                }
                 
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this,
@@ -2049,7 +2052,7 @@ public class ConversionPanel extends JPanel {
                 useSequential = true;
             }
             
-            Util.renameFilesWithAdvancedOptions(
+            int renamedCount = Util.renameFilesWithAdvancedOptions(
                 filesToRename,
                 conversion.name,
                 conversion.note,
@@ -2060,6 +2063,12 @@ public class ConversionPanel extends JPanel {
                 includeSubdirs, useSequential,
                 conversion
             );
+            
+            if (renamedCount > 0) {
+                // References are automatically updated by the rename method
+                updateLinkedFiles();
+                projectFrame.markUnsavedChanges();
+            }
 
             // Optionally delete ignored system files from disk
             if (ignoreSystemFiles && deleteIgnored) {
@@ -2069,9 +2078,6 @@ public class ConversionPanel extends JPanel {
                     }
                 }
             }
-            
-            updateLinkedFiles();
-            projectFrame.markUnsavedChanges();
             
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,

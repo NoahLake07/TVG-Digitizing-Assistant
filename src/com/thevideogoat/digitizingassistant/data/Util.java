@@ -10,25 +10,64 @@ import java.util.ListIterator;
 
 public class Util {
 
-    public static File renameFile(File file, String newName){
+    /**
+     * Renames a file with proper error handling and validation.
+     * 
+     * @param file The file to rename
+     * @param newName The new name for the file
+     * @return The new file if rename succeeded, original file if it failed
+     * @throws IllegalArgumentException if file is null or newName is empty
+     */
+    public static File renameFile(File file, String newName) {
+        if (file == null) {
+            throw new IllegalArgumentException("File cannot be null");
+        }
+        if (newName == null || newName.trim().isEmpty()) {
+            throw new IllegalArgumentException("New name cannot be null or empty");
+        }
+        
+        // Validate that the file exists
+        if (!file.exists()) {
+            System.err.println("Warning: Cannot rename non-existent file: " + file.getAbsolutePath());
+            return file;
+        }
+        
+        // Validate that the file is writable
+        if (!file.canWrite()) {
+            System.err.println("Warning: Cannot rename read-only file: " + file.getAbsolutePath());
+            return file;
+        }
+        
         String extension = "";
         int i = file.getName().lastIndexOf('.');
         if (i > 0) {
             extension = file.getName().substring(i);
         }
         
+        File newFile;
         // Check if newName already contains the extension
         if (newName.toLowerCase().endsWith(extension.toLowerCase())) {
             // newName already has the extension, don't add it again
-            File newFile = new File(file.getParentFile(), newName);
-            boolean success = file.renameTo(newFile);
-            return success ? newFile : file; // Return original file if rename failed
+            newFile = new File(file.getParentFile(), newName);
         } else {
             // Add the extension to newName
-            File newFile = new File(file.getParentFile(), newName + extension);
-            boolean success = file.renameTo(newFile);
-            return success ? newFile : file; // Return original file if rename failed
+            newFile = new File(file.getParentFile(), newName + extension);
         }
+        
+        // Check if target already exists and is different from source
+        if (newFile.exists() && !newFile.equals(file)) {
+            System.err.println("Warning: Target file already exists: " + newFile.getAbsolutePath());
+            return file;
+        }
+        
+        // Attempt the rename
+        boolean success = file.renameTo(newFile);
+        if (!success) {
+            System.err.println("Error: Failed to rename file from " + file.getAbsolutePath() + " to " + newFile.getAbsolutePath());
+            return file;
+        }
+        
+        return newFile;
     }
 
     public static boolean deleteFile(File file){
@@ -240,50 +279,115 @@ public class Util {
         return videoFiles;
     }
 
-    public static void renameFilesWithOptions(ArrayList<File> files, String newName, 
+    /**
+     * Renames files with basic options and proper error handling.
+     * 
+     * @param files List of files to rename
+     * @param newName New name for the files
+     * @param includeSubdirectories Whether to include subdirectories
+     * @param preserveNumbering Whether to preserve existing numbers
+     * @return Number of files successfully renamed
+     */
+    public static int renameFilesWithOptions(ArrayList<File> files, String newName, 
         boolean includeSubdirectories, boolean preserveNumbering) {
         
-        if (files.isEmpty()) {
-            return;
+        if (files == null || files.isEmpty()) {
+            return 0;
         }
 
         int renamedCount = 0;
+        int errorCount = 0;
+        
         for (File file : files) {
-            if (file.isDirectory() && includeSubdirectories) {
-                // Rename all files in directory and subdirectories
-                renamedCount += renameFilesInDirectory(file, newName, includeSubdirectories, preserveNumbering);
-            } else {
-                // Rename just this file
-                String finalName = preserveNumbering ? 
-                    preserveNumberInFilename(file.getName(), newName) : 
-                    newName;
-                renameFile(file, finalName);
-                renamedCount++;
+            try {
+                if (file.isDirectory() && includeSubdirectories) {
+                    // Rename all files in directory and subdirectories
+                    int subdirRenamed = renameFilesInDirectory(file, newName, includeSubdirectories, preserveNumbering);
+                    renamedCount += subdirRenamed;
+                } else {
+                    // Rename just this file
+                    String finalName = preserveNumbering ? 
+                        preserveNumberInFilename(file.getName(), newName) : 
+                        newName;
+                    
+                    File renamedFile = renameFile(file, finalName);
+                    if (renamedFile != file) {
+                        renamedCount++;
+                    } else {
+                        errorCount++;
+                        System.err.println("Failed to rename file: " + file.getAbsolutePath());
+                    }
+                }
+            } catch (Exception e) {
+                errorCount++;
+                System.err.println("Error renaming file " + file.getAbsolutePath() + ": " + e.getMessage());
             }
         }
 
-        JOptionPane.showMessageDialog(null, 
-            "Renamed " + renamedCount + " files/directories.", 
-            "Rename Success", 
-            JOptionPane.INFORMATION_MESSAGE);
+        // Show completion message with error count if any
+        String message = "Renamed " + renamedCount + " files/directories.";
+        if (errorCount > 0) {
+            message += "\n" + errorCount + " files could not be renamed (check console for details).";
+        }
+        
+        JOptionPane.showMessageDialog(null, message, "Rename Complete", 
+            errorCount > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE);
+        
+        return renamedCount;
     }
     
-    // Adapter method for FileReference support
-    public static void renameFilesWithOptionsFromReferences(ArrayList<FileReference> fileRefs, String newName, 
-        boolean includeSubdirectories, boolean preserveNumbering) {
+    /**
+     * Renames files from FileReference list with proper reference updates.
+     * 
+     * @param fileRefs List of FileReference objects to rename
+     * @param newName New name for the files
+     * @param includeSubdirectories Whether to include subdirectories
+     * @param preserveNumbering Whether to preserve existing numbers
+     * @param conversion The conversion object for reference updates
+     * @return Number of files successfully renamed
+     */
+    public static int renameFilesWithOptionsFromReferences(ArrayList<FileReference> fileRefs, String newName, 
+        boolean includeSubdirectories, boolean preserveNumbering, Conversion conversion) {
         
-        if (fileRefs.isEmpty()) {
-            return;
+        if (fileRefs == null || fileRefs.isEmpty()) {
+            return 0;
         }
 
-        // Convert FileReferences to Files
+        // Convert FileReferences to Files and track the mapping
         ArrayList<File> files = new ArrayList<>();
+        java.util.Map<File, FileReference> fileToRefMap = new java.util.HashMap<>();
+        
         for (FileReference fileRef : fileRefs) {
-            files.add(fileRef.getFile());
+            File file = fileRef.getFile();
+            files.add(file);
+            fileToRefMap.put(file, fileRef);
         }
         
         // Call the original method
-        renameFilesWithOptions(files, newName, includeSubdirectories, preserveNumbering);
+        int renamedCount = renameFilesWithOptions(files, newName, includeSubdirectories, preserveNumbering);
+        
+        // Update FileReference objects to point to renamed files
+        if (renamedCount > 0 && conversion != null) {
+            // Use the new batch update method to handle reference updates
+            for (FileReference fileRef : fileRefs) {
+                File oldFile = fileRef.getFile();
+                File parentDir = oldFile.getParentFile();
+                if (parentDir != null && parentDir.exists()) {
+                    updateLinkedFileReferencesAfterBatchRename(conversion, newName, parentDir);
+                }
+            }
+        }
+        
+        return renamedCount;
+    }
+    
+    /**
+     * Legacy method for backward compatibility - calls the new method without conversion parameter.
+     */
+    public static void renameFilesWithOptionsFromReferences(ArrayList<FileReference> fileRefs, String newName, 
+        boolean includeSubdirectories, boolean preserveNumbering) {
+        
+        renameFilesWithOptionsFromReferences(fileRefs, newName, includeSubdirectories, preserveNumbering, null);
     }
 
     private static String preserveNumberInFilename(String oldName, String newName) {
@@ -319,29 +423,76 @@ public class Util {
         return count;
     }
 
-    public static void renameFilesWithAdvancedOptions(ArrayList<File> files, String conversionName, String conversionNote,
+    /**
+     * Renames files with advanced options and proper error handling.
+     * 
+     * @param files List of files to rename
+     * @param conversionName Name of the conversion
+     * @param conversionNote Note for the conversion
+     * @param separator Separator to use in filenames
+     * @param addDate Whether to add date prefix
+     * @param prefixName Whether to prefix with conversion name
+     * @param prefixNote Whether to prefix with conversion note
+     * @param suffixName Whether to suffix with conversion name
+     * @param suffixNote Whether to suffix with conversion note
+     * @param replace Whether to replace filename
+     * @param smartReplace Whether to use smart replace
+     * @param custom Whether to use custom format
+     * @param customFormat Custom format string
+     * @param includeSubdirectories Whether to include subdirectories
+     * @param useSequential Whether to use sequential numbering
+     * @param conversion The conversion object for reference updates
+     * @return Number of files successfully renamed
+     */
+    public static int renameFilesWithAdvancedOptions(ArrayList<File> files, String conversionName, String conversionNote,
             String separator, boolean addDate, boolean prefixName, boolean prefixNote, 
             boolean suffixName, boolean suffixNote, boolean replace, boolean smartReplace, 
             boolean custom, String customFormat, boolean includeSubdirectories, boolean useSequential,
             Conversion conversion) {
         
-        if (files.isEmpty()) {
-            return;
+        if (files == null || files.isEmpty()) {
+            return 0;
         }
 
         int renamedCount = 0;
+        int errorCount = 0;
         String datePrefix = addDate ? java.time.LocalDate.now().toString() + separator : "";
 
-        // Simple approach: process each file individually and handle conflicts as they come
+        // Process each file individually and handle conflicts as they come
         for (File file : files) {
-            if (file.isDirectory()) {
-                if (includeSubdirectories) {
-                    // Rename files INSIDE the directory (keep directory name)
-                    renamedCount += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote, 
-                        separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote, 
-                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, 1, conversion);
+            try {
+                if (file.isDirectory()) {
+                    if (includeSubdirectories) {
+                        // Rename files INSIDE the directory (keep directory name)
+                        int subdirRenamed = renameFilesInDirectoryAdvanced(file, conversionName, conversionNote, 
+                            separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote, 
+                            replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, 1, conversion);
+                        renamedCount += subdirRenamed;
+                    } else {
+                        // Rename the DIRECTORY itself
+                        String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
+                            separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
+                            replace, smartReplace, custom, customFormat, useSequential, 1);
+                        
+                        if (!newName.equals(file.getName())) {
+                            File newFile = renameFileWithConflictResolution(file, newName, useSequential);
+                            if (newFile != file) {
+                                renamedCount++;
+                                // Update linked file references to point to new directory path
+                                updateLinkedFileReferences(conversion, file, newFile);
+                            } else {
+                                errorCount++;
+                                System.err.println("Failed to rename directory: " + file.getAbsolutePath());
+                            }
+                        }
+                    }
                 } else {
-                    // Rename the DIRECTORY itself
+                    // Skip common system-level files proactively
+                    if (isSystemLevelFile(file.getName())) {
+                        continue;
+                    }
+                    
+                    // Handle individual file renaming
                     String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
                         replace, smartReplace, custom, customFormat, useSequential, 1);
@@ -349,38 +500,31 @@ public class Util {
                     if (!newName.equals(file.getName())) {
                         File newFile = renameFileWithConflictResolution(file, newName, useSequential);
                         if (newFile != file) {
-                            renamedCount++;
-                            // Update linked file references to point to new directory path
+                            // Update linked file references to point to new file path
                             updateLinkedFileReferences(conversion, file, newFile);
+                            renamedCount++;
+                        } else {
+                            errorCount++;
+                            System.err.println("Failed to rename file: " + file.getAbsolutePath());
                         }
                     }
                 }
-            } else {
-                // Skip common system-level files proactively
-                if (isSystemLevelFile(file.getName())) {
-                    continue;
-                }
-                
-                // Handle individual file renaming
-                String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
-                    separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                    replace, smartReplace, custom, customFormat, useSequential, 1);
-                
-                if (!newName.equals(file.getName())) {
-                    File newFile = renameFileWithConflictResolution(file, newName, useSequential);
-                    if (newFile != file) {
-                        // Update linked file references to point to new file path
-                        updateLinkedFileReferences(conversion, file, newFile);
-                        renamedCount++;
-                    }
-                }
+            } catch (Exception e) {
+                errorCount++;
+                System.err.println("Error renaming file " + file.getAbsolutePath() + ": " + e.getMessage());
             }
         }
 
-        JOptionPane.showMessageDialog(null, 
-            "Advanced rename completed! Renamed " + renamedCount + " files.", 
-            "Rename Success", 
-            JOptionPane.INFORMATION_MESSAGE);
+        // Show completion message with error count if any
+        String message = "Advanced rename completed! Renamed " + renamedCount + " files.";
+        if (errorCount > 0) {
+            message += "\n" + errorCount + " files could not be renamed (check console for details).";
+        }
+        
+        JOptionPane.showMessageDialog(null, message, "Rename Complete", 
+            errorCount > 0 ? JOptionPane.WARNING_MESSAGE : JOptionPane.INFORMATION_MESSAGE);
+        
+        return renamedCount;
     }
 
     public static boolean isSystemLevelFile(String name) {
@@ -392,14 +536,38 @@ public class Util {
     }
 
     /**
-     * Rename a file with automatic conflict resolution
+     * Rename a file with automatic conflict resolution and proper error handling.
+     * 
      * @param file The file to rename
      * @param desiredName The desired new name
      * @param useSequential Whether to use zero-padded sequential numbering
      * @return The new file if rename succeeded, original file if it failed
+     * @throws IllegalArgumentException if file is null or desiredName is empty
      */
     private static File renameFileWithConflictResolution(File file, String desiredName, boolean useSequential) {
+        if (file == null) {
+            throw new IllegalArgumentException("File cannot be null");
+        }
+        if (desiredName == null || desiredName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Desired name cannot be null or empty");
+        }
+        
+        // Validate that the file exists and is writable
+        if (!file.exists()) {
+            System.err.println("Warning: Cannot rename non-existent file: " + file.getAbsolutePath());
+            return file;
+        }
+        if (!file.canWrite()) {
+            System.err.println("Warning: Cannot rename read-only file: " + file.getAbsolutePath());
+            return file;
+        }
+        
         File parentDir = file.getParentFile();
+        if (parentDir == null || !parentDir.exists() || !parentDir.canWrite()) {
+            System.err.println("Warning: Cannot rename file - parent directory issues: " + file.getAbsolutePath());
+            return file;
+        }
+        
         String candidate = desiredName;
         
         // Extract base name and extension
@@ -416,21 +584,37 @@ public class Util {
         if (!targetFile.exists() || targetFile.equals(file)) {
             // No conflict, try to rename
             boolean success = file.renameTo(targetFile);
-            return success ? targetFile : file;
+            if (success) {
+                return targetFile;
+            } else {
+                System.err.println("Error: Failed to rename file from " + file.getAbsolutePath() + " to " + targetFile.getAbsolutePath());
+                return file;
+            }
         }
         
         // Conflict exists, find a unique name
         int counter = 1;
+        int maxAttempts = 1000; // Prevent infinite loops
         do {
             String suffix = useSequential ? String.format(" (%03d)", counter) : " (" + counter + ")";
             candidate = base + suffix + ext;
             targetFile = new File(parentDir, candidate);
             counter++;
-        } while (targetFile.exists());
+        } while (targetFile.exists() && counter <= maxAttempts);
+        
+        if (counter > maxAttempts) {
+            System.err.println("Error: Could not find unique name for file after " + maxAttempts + " attempts: " + file.getAbsolutePath());
+            return file;
+        }
         
         // Try to rename with the unique name
         boolean success = file.renameTo(targetFile);
-        return success ? targetFile : file;
+        if (success) {
+            return targetFile;
+        } else {
+            System.err.println("Error: Failed to rename file from " + file.getAbsolutePath() + " to " + targetFile.getAbsolutePath());
+            return file;
+        }
     }
 
     private static int renameFilesInDirectoryAdvanced(File directory, String conversionName, String conversionNote,
@@ -645,19 +829,126 @@ public class Util {
         return numbers.isEmpty() ? "001" : numbers;
     }
 
-    private static void updateLinkedFileReferences(Conversion conversion, File oldFile, File newFile) {
-        if (conversion.linkedFiles == null) return;
+    /**
+     * Updates linked file references after a rename operation.
+     * This method handles both individual files and directories.
+     * 
+     * @param conversion The conversion containing the linked files
+     * @param oldFile The original file/directory path
+     * @param newFile The new file/directory path after rename
+     * @return true if any references were updated, false otherwise
+     */
+    private static boolean updateLinkedFileReferences(Conversion conversion, File oldFile, File newFile) {
+        if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty()) {
+            return false;
+        }
         
-        // Update any linked file references that point to the old directory
+        boolean updated = false;
+        String oldPath = oldFile.getAbsolutePath();
+        
+        // Update any linked file references that point to the old path
         for (int i = 0; i < conversion.linkedFiles.size(); i++) {
             FileReference fileRef = conversion.linkedFiles.get(i);
             
-            // Check if this reference points to the renamed directory
-            if (fileRef.getPath().equals(oldFile.getAbsolutePath())) {
-                // Update to point to the new directory
+            // Check if this reference points to the renamed file/directory
+            if (fileRef.getPath().equals(oldPath)) {
+                // Update to point to the new file/directory
                 conversion.linkedFiles.set(i, new FileReference(newFile));
+                updated = true;
             }
         }
+        
+        return updated;
+    }
+    
+    /**
+     * Updates linked file references after a batch rename operation.
+     * This method scans the directory for renamed files and updates references accordingly.
+     * 
+     * @param conversion The conversion containing the linked files
+     * @param baseName The base name used for renaming
+     * @param parentDirectory The directory where files were renamed
+     * @return true if any references were updated, false otherwise
+     */
+    public static boolean updateLinkedFileReferencesAfterBatchRename(Conversion conversion, String baseName, File parentDirectory) {
+        if (conversion.linkedFiles == null || conversion.linkedFiles.isEmpty() || parentDirectory == null || !parentDirectory.exists()) {
+            return false;
+        }
+        
+        boolean updated = false;
+        ArrayList<FileReference> updatedReferences = new ArrayList<>();
+        
+        // Get a snapshot of files in the directory to avoid race conditions
+        File[] directoryFiles = parentDirectory.listFiles();
+        if (directoryFiles == null) {
+            return false;
+        }
+        
+        // Create a map of normalized filenames to actual files for efficient lookup
+        java.util.Map<String, File> fileMap = new java.util.HashMap<>();
+        for (File file : directoryFiles) {
+            if (file.isFile()) {
+                fileMap.put(normalizeFilename(file.getName()), file);
+            }
+        }
+        
+        // Update references based on the renamed files
+        for (FileReference oldRef : conversion.linkedFiles) {
+            File oldFile = oldRef.getFile();
+            
+            // Check if the old file is in the same directory
+            if (oldFile.getParentFile() != null && oldFile.getParentFile().equals(parentDirectory)) {
+                String oldExtension = getFileExtension(oldFile.getName());
+                String baseNorm = normalizeFilename(baseName);
+                
+                // Look for a file with the new base name and same extension
+                File newFile = null;
+                for (java.util.Map.Entry<String, File> entry : fileMap.entrySet()) {
+                    String normalizedName = entry.getKey();
+                    File candidateFile = entry.getValue();
+                    
+                    if (normalizedName.contains(baseNorm) && candidateFile.getName().endsWith(oldExtension)) {
+                        newFile = candidateFile;
+                        break;
+                    }
+                }
+                
+                if (newFile != null) {
+                    updatedReferences.add(new FileReference(newFile));
+                    updated = true;
+                } else {
+                    // Keep the old reference if no match found
+                    updatedReferences.add(oldRef);
+                }
+            } else {
+                // Keep references to files in other directories unchanged
+                updatedReferences.add(oldRef);
+            }
+        }
+        
+        if (updated) {
+            conversion.linkedFiles.clear();
+            conversion.linkedFiles.addAll(updatedReferences);
+        }
+        
+        return updated;
+    }
+    
+    /**
+     * Normalizes a filename for comparison by removing common variations.
+     */
+    private static String normalizeFilename(String filename) {
+        if (filename == null) return "";
+        return filename.toLowerCase().replaceAll("[^a-z0-9]", "");
+    }
+    
+    /**
+     * Extracts the file extension from a filename.
+     */
+    private static String getFileExtension(String filename) {
+        if (filename == null) return "";
+        int dotIndex = filename.lastIndexOf('.');
+        return (dotIndex > 0) ? filename.substring(dotIndex) : "";
     }
 
     public static void relinkToTrimmedFiles(Project project) {
