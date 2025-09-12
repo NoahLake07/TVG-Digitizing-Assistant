@@ -385,7 +385,9 @@ public class Util {
                     ext = candidate.substring(dotIdx);
                 }
                 int conflictCounter = 1;
-                while (used.contains(candidate) || new File(parentDir, candidate).exists()) {
+                
+                // Check for conflicts with both used names in this batch AND existing files on disk
+                while (used.contains(candidate) || (new File(parentDir, candidate).exists() && !new File(parentDir, candidate).equals(file))) {
                     // Strip existing numbering like " (1)" or " (001)"
                     String cleanBase = base.replaceAll(" \\((?:\\d+|\\d{3})\\)$", "");
                     String suffix = useSequential ? String.format(" (%03d)", conflictCounter) : " (" + conflictCounter + ")";
