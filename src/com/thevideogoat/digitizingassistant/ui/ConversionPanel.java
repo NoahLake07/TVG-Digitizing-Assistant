@@ -1738,6 +1738,21 @@ public class ConversionPanel extends JPanel {
         previewButton.addActionListener(e -> updatePreview.run());
         
         renameButton.addActionListener(e -> {
+            // Validate that at least one rename strategy is selected
+            boolean hasStrategy = prefixNameBtn.isSelected() || prefixNoteBtn.isSelected() || 
+                                suffixNameBtn.isSelected() || suffixNoteBtn.isSelected() || 
+                                replaceNoteBtn.isSelected() || noteNumberBtn.isSelected() || 
+                                replaceBtn.isSelected() || smartReplaceBtn.isSelected() || 
+                                customBtn.isSelected() || addDate.isSelected();
+            
+            if (!hasStrategy) {
+                JOptionPane.showMessageDialog(dialog,
+                    "Please select at least one rename strategy (prefix, suffix, replace, custom, etc.).",
+                    "No Strategy Selected",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
             // Validate inputs
             if (prefixNoteBtn.isSelected() || suffixNoteBtn.isSelected() || replaceNoteBtn.isSelected() || noteNumberBtn.isSelected()) {
                 if (conversion.note.trim().isEmpty()) {
@@ -2026,6 +2041,18 @@ public class ConversionPanel extends JPanel {
             boolean includeSubdirs, boolean useSequential, boolean ignoreSystemFiles, boolean deleteIgnored) {
         
         try {
+            // Validate that at least one rename strategy is selected
+            boolean hasStrategy = prefixName || prefixNote || suffixName || suffixNote || 
+                                replaceNote || noteNumber || replace || smartReplace || custom || addDate;
+            
+            if (!hasStrategy) {
+                JOptionPane.showMessageDialog(this,
+                    "Please select at least one rename strategy (prefix, suffix, replace, custom, etc.).",
+                    "No Strategy Selected",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
             // Convert FileReferences to Files for the rename operation
             ArrayList<File> filesToRename = new ArrayList<>();
             for (FileReference fileRef : conversion.linkedFiles) {
@@ -2034,6 +2061,15 @@ public class ConversionPanel extends JPanel {
                     continue;
                 }
                 filesToRename.add(fileRef.getFile());
+            }
+            
+            // Check if we have any files to rename after filtering
+            if (filesToRename.isEmpty()) {
+                JOptionPane.showMessageDialog(this,
+                    "No files available to rename (all files may have been filtered out).",
+                    "No Files to Rename",
+                    JOptionPane.WARNING_MESSAGE);
+                return;
             }
             
             // Handle "Rename to conversion note" option
@@ -2051,6 +2087,22 @@ public class ConversionPanel extends JPanel {
                 // Force sequential numbering to prevent conflicts when renaming multiple files
                 useSequential = true;
             }
+            
+            // Debug: Show what strategy is being used
+            String strategyInfo = "Strategy: ";
+            if (replaceNote) strategyInfo += "Replace with Note ";
+            else if (noteNumber) strategyInfo += "Note + Number ";
+            else if (custom) strategyInfo += "Custom (" + customFormat + ") ";
+            else if (prefixName) strategyInfo += "Prefix Name ";
+            else if (prefixNote) strategyInfo += "Prefix Note ";
+            else if (suffixName) strategyInfo += "Suffix Name ";
+            else if (suffixNote) strategyInfo += "Suffix Note ";
+            else if (replace) strategyInfo += "Replace ";
+            else if (smartReplace) strategyInfo += "Smart Replace ";
+            else if (addDate) strategyInfo += "Add Date ";
+            else strategyInfo += "Unknown ";
+            
+            System.out.println("Advanced Rename Debug: " + strategyInfo + "| Files: " + filesToRename.size());
             
             int renamedCount = Util.renameFilesWithAdvancedOptions(
                 filesToRename,

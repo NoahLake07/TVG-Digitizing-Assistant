@@ -803,6 +803,7 @@ public class Util {
                 return originalName; // Keep original if not generic
             }
         } else {
+            System.out.println("DEBUG: No rename strategy selected for file: " + originalName);
             return originalName; // No strategy selected, keep original
         }
 
