@@ -330,37 +330,29 @@ public class Util {
         }
 
         int renamedCount = 0;
-        int sequenceNumber = 1;
         String datePrefix = addDate ? java.time.LocalDate.now().toString() + separator : "";
 
-        // Track used names per parent directory to avoid collisions across the batch
-        java.util.Map<File, java.util.Set<String>> dirToUsedNames = new java.util.HashMap<>();
-
+        // Simple approach: process each file individually and handle conflicts as they come
         for (File file : files) {
             if (file.isDirectory()) {
                 if (includeSubdirectories) {
                     // Rename files INSIDE the directory (keep directory name)
                     renamedCount += renameFilesInDirectoryAdvanced(file, conversionName, conversionNote, 
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote, 
-                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, sequenceNumber, conversion);
+                        replace, smartReplace, custom, customFormat, includeSubdirectories, useSequential, 1, conversion);
                 } else {
                     // Rename the DIRECTORY itself
                     String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                         separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                        replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
+                        replace, smartReplace, custom, customFormat, useSequential, 1);
                     
                     if (!newName.equals(file.getName())) {
-                        File newFile = renameFile(file, newName);
+                        File newFile = renameFileWithConflictResolution(file, newName, useSequential);
                         if (newFile != file) {
                             renamedCount++;
-                            
                             // Update linked file references to point to new directory path
                             updateLinkedFileReferences(conversion, file, newFile);
                         }
-                    }
-                    
-                    if (useSequential) {
-                        sequenceNumber++;
                     }
                 }
             } else {
@@ -368,45 +360,19 @@ public class Util {
                 if (isSystemLevelFile(file.getName())) {
                     continue;
                 }
+                
                 // Handle individual file renaming
                 String newName = generateAdvancedFileName(file.getName(), conversionName, conversionNote,
                     separator, datePrefix, prefixName, prefixNote, suffixName, suffixNote,
-                    replace, smartReplace, custom, customFormat, useSequential, sequenceNumber);
+                    replace, smartReplace, custom, customFormat, useSequential, 1);
                 
-                // Ensure uniqueness in the target directory, even if useSequential is off
-                File parentDir = file.getParentFile();
-                java.util.Set<String> used = dirToUsedNames.computeIfAbsent(parentDir, d -> new java.util.HashSet<>());
-                String candidate = newName;
-                String base = candidate;
-                String ext = "";
-                int dotIdx = candidate.lastIndexOf('.');
-                if (dotIdx > 0) {
-                    base = candidate.substring(0, dotIdx);
-                    ext = candidate.substring(dotIdx);
-                }
-                int conflictCounter = 1;
-                
-                // Check for conflicts with both used names in this batch AND existing files on disk
-                while (used.contains(candidate) || (new File(parentDir, candidate).exists() && !new File(parentDir, candidate).equals(file))) {
-                    // Strip existing numbering like " (1)" or " (001)"
-                    String cleanBase = base.replaceAll(" \\((?:\\d+|\\d{3})\\)$", "");
-                    String suffix = useSequential ? String.format(" (%03d)", conflictCounter) : " (" + conflictCounter + ")";
-                    candidate = cleanBase + suffix + ext;
-                    conflictCounter++;
-                }
-
-                if (!candidate.equals(file.getName())) {
-                    File newFile = renameFile(file, candidate);
+                if (!newName.equals(file.getName())) {
+                    File newFile = renameFileWithConflictResolution(file, newName, useSequential);
                     if (newFile != file) {
                         // Update linked file references to point to new file path
                         updateLinkedFileReferences(conversion, file, newFile);
                         renamedCount++;
-                        used.add(candidate);
                     }
-                }
-                
-                if (useSequential) {
-                    sequenceNumber++;
                 }
             }
         }
@@ -423,6 +389,48 @@ public class Util {
                lower.equals("desktop.ini") || lower.equals(".spotlight-v100") ||
                lower.equals(".trashes") || lower.equals(".temporaryitems") ||
                lower.startsWith("._");
+    }
+
+    /**
+     * Rename a file with automatic conflict resolution
+     * @param file The file to rename
+     * @param desiredName The desired new name
+     * @param useSequential Whether to use zero-padded sequential numbering
+     * @return The new file if rename succeeded, original file if it failed
+     */
+    private static File renameFileWithConflictResolution(File file, String desiredName, boolean useSequential) {
+        File parentDir = file.getParentFile();
+        String candidate = desiredName;
+        
+        // Extract base name and extension
+        String base = candidate;
+        String ext = "";
+        int dotIdx = candidate.lastIndexOf('.');
+        if (dotIdx > 0) {
+            base = candidate.substring(0, dotIdx);
+            ext = candidate.substring(dotIdx);
+        }
+        
+        // Try the desired name first
+        File targetFile = new File(parentDir, candidate);
+        if (!targetFile.exists() || targetFile.equals(file)) {
+            // No conflict, try to rename
+            boolean success = file.renameTo(targetFile);
+            return success ? targetFile : file;
+        }
+        
+        // Conflict exists, find a unique name
+        int counter = 1;
+        do {
+            String suffix = useSequential ? String.format(" (%03d)", counter) : " (" + counter + ")";
+            candidate = base + suffix + ext;
+            targetFile = new File(parentDir, candidate);
+            counter++;
+        } while (targetFile.exists());
+        
+        // Try to rename with the unique name
+        boolean success = file.renameTo(targetFile);
+        return success ? targetFile : file;
     }
 
     private static int renameFilesInDirectoryAdvanced(File directory, String conversionName, String conversionNote,
@@ -479,10 +487,12 @@ public class Util {
                 usedNames.add(finalName);
                 
                 if (!finalName.equals(file.getName())) {
-                    File newFile = renameFile(file, finalName);
-                    // Update linked file references to point to new file path
-                    updateLinkedFileReferences(conversion, file, newFile);
-                    count++;
+                    File newFile = renameFileWithConflictResolution(file, finalName, useSequential);
+                    if (newFile != file) {
+                        // Update linked file references to point to new file path
+                        updateLinkedFileReferences(conversion, file, newFile);
+                        count++;
+                    }
                 }
                 
                 if (useSequential) {
