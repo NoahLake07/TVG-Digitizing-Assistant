@@ -411,12 +411,18 @@ public class ConversionPanel extends JPanel {
             }
         });
         
+        JMenuItem quickRelink = new JMenuItem("Quick Relink");
+        quickRelink.addActionListener(e -> {
+            performQuickRelink();
+        });
+        
         fileMenu.add(openFile);
         fileMenu.add(showInExplorer);
         fileMenu.add(copyPath);
         fileMenu.addSeparator();
         fileMenu.add(renameFile);
         fileMenu.add(relinkMedia);
+        fileMenu.add(quickRelink);
         fileMenu.add(removeFile);
         
         filesList.addMouseListener(new MouseAdapter() {
@@ -2154,15 +2160,22 @@ public class ConversionPanel extends JPanel {
             com.thevideogoat.digitizingassistant.data.Preferences.getInstance().setLastUsedDirectory(root.getAbsolutePath());
         }
 
-        JCheckBox byNote = new JCheckBox("Match conversion note", true);
-        JCheckBox byTitle = new JCheckBox("Match conversion title", true);
-        JCheckBox byTrimmed = new JCheckBox("Match trimmed filenames (_trimmed)", true);
+        // Load saved preferences for checkbox states
+        com.thevideogoat.digitizingassistant.data.Preferences prefs = com.thevideogoat.digitizingassistant.data.Preferences.getInstance();
+        JCheckBox byNote = new JCheckBox("Match conversion note", prefs.isRelinkByNote());
+        JCheckBox byTitle = new JCheckBox("Match conversion title", prefs.isRelinkByTitle());
+        JCheckBox byTrimmed = new JCheckBox("Match trimmed filenames (_trimmed)", prefs.isRelinkByTrimmed());
 
         JPanel opts = new JPanel(new GridLayout(0,1));
         opts.add(byNote); opts.add(byTitle); opts.add(byTrimmed);
 
         int ok = JOptionPane.showConfirmDialog(this, opts, "Relink Search Options", JOptionPane.OK_CANCEL_OPTION);
         if (ok != JOptionPane.OK_OPTION) return;
+        
+        // Save the checkbox states to preferences
+        prefs.setRelinkByNote(byNote.isSelected());
+        prefs.setRelinkByTitle(byTitle.isSelected());
+        prefs.setRelinkByTrimmed(byTrimmed.isSelected());
 
         java.util.List<File> matches = new java.util.ArrayList<>();
         java.util.function.Predicate<File> predicate = f -> {
@@ -2257,6 +2270,125 @@ public class ConversionPanel extends JPanel {
         }
         updateLinkedFiles();
         projectFrame.markUnsavedChanges();
+    }
+    
+    private void performQuickRelink() {
+        // Get the last used directory from preferences
+        String lastDir = com.thevideogoat.digitizingassistant.data.Preferences.getInstance().getLastUsedDirectory();
+        if (lastDir == null || !new File(lastDir).exists()) {
+            JOptionPane.showMessageDialog(this,
+                "No previous relink directory found. Please use the regular 'Relink Media' option first.",
+                "Quick Relink",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        
+        File root = new File(lastDir);
+        
+        // Get saved relink preferences
+        com.thevideogoat.digitizingassistant.data.Preferences prefs = com.thevideogoat.digitizingassistant.data.Preferences.getInstance();
+        boolean byNote = prefs.isRelinkByNote();
+        boolean byTitle = prefs.isRelinkByTitle();
+        boolean byTrimmed = prefs.isRelinkByTrimmed();
+        
+        // Use the same search logic as showRelinkDialog()
+        java.util.List<File> matches = new java.util.ArrayList<>();
+        java.util.function.Predicate<File> predicate = f -> {
+            if (f.isDirectory()) return false;
+            String lowerName = f.getName().toLowerCase();
+            if (lowerName.endsWith(".llc")) return false; // ignore LosslessCut project files
+
+            boolean matched = false;
+
+            // Exact match on note (base name equals conversion note), any extension
+            if (byNote && conversion.note != null && !conversion.note.isBlank()) {
+                String base = lowerName;
+                int dot = base.lastIndexOf('.');
+                if (dot > 0) base = base.substring(0, dot);
+                matched |= base.equals(conversion.note.toLowerCase());
+            }
+
+            // Exact match on title with .mp4 extension
+            if (!matched && byTitle) {
+                String base = lowerName;
+                int dot = base.lastIndexOf('.');
+                String ext = "";
+                if (dot > 0) {
+                    ext = base.substring(dot);
+                    base = base.substring(0, dot);
+                }
+                matched |= base.equals(conversion.name.toLowerCase()) && ext.equals(".mp4");
+            }
+
+            // Trimmed match: title_... with "trimmed" somewhere
+            if (!matched && byTrimmed) {
+                String baseTitle = conversion.name.toLowerCase();
+                matched |= lowerName.startsWith(baseTitle + "_") && lowerName.contains("trimmed");
+            }
+            return matched;
+        };
+
+        java.util.Deque<File> stack = new java.util.ArrayDeque<>();
+        stack.push(root);
+        while(!stack.isEmpty()){
+            File dir = stack.pop();
+            File[] list = dir.listFiles();
+            if (list == null) continue;
+            for (File f : list) {
+                if (f.isDirectory()) { stack.push(f); continue; }
+                if (predicate.test(f)) matches.add(f);
+            }
+        }
+
+        if (matches.isEmpty()) {
+            JOptionPane.showMessageDialog(this, 
+                "No matching files found using saved settings.", 
+                "Quick Relink", 
+                JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        // Prioritize results: 1) note exact, 2) trimmed, 3) title exact mp4
+        java.util.function.ToIntFunction<File> rank = f -> {
+            String lowerName = f.getName().toLowerCase();
+            String base = lowerName;
+            int dot = base.lastIndexOf('.');
+            String ext = "";
+            if (dot > 0) { ext = base.substring(dot); base = base.substring(0, dot); }
+
+            // note exact
+            if (byNote && conversion.note != null && !conversion.note.isBlank()) {
+                if (base.equals(conversion.note.toLowerCase())) return 0;
+            }
+            // trimmed
+            if (byTrimmed) {
+                String baseTitle = conversion.name.toLowerCase();
+                if (lowerName.startsWith(baseTitle + "_") && lowerName.contains("trimmed")) return 1;
+            }
+            // title exact mp4
+            if (byTitle) {
+                if (base.equals(conversion.name.toLowerCase()) && ext.equals(".mp4")) return 2;
+            }
+            return 3;
+        };
+        matches.sort(java.util.Comparator.comparingInt(rank).thenComparing(File::getName));
+
+        // Auto-select the best match (first in sorted list) for quick relink
+        File bestMatch = matches.get(0);
+        
+        // Clear existing linked files and add the best match
+        if (conversion.linkedFiles == null) conversion.linkedFiles = new ArrayList<>();
+        conversion.linkedFiles.clear();
+        conversion.linkedFiles.add(new FileReference(bestMatch.getAbsolutePath()));
+        
+        updateLinkedFiles();
+        projectFrame.markUnsavedChanges();
+        
+        // Show success message
+        JOptionPane.showMessageDialog(this,
+            "Quick relink completed. Linked to: " + bestMatch.getName(),
+            "Quick Relink",
+            JOptionPane.INFORMATION_MESSAGE);
     }
 
     // Helper methods for modern UI styling

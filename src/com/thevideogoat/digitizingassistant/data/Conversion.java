@@ -79,6 +79,8 @@ public class Conversion implements Serializable {
                 return new Color(255, 165, 0); // Orange - fixed damage
             case DAMAGE_IRREVERSIBLE:
                 return new Color(128, 0, 128); // Purple - irreversible damage
+            case CANCELLED:
+                return new Color(128, 128, 128); // Gray - cancelled
             case IN_PROGRESS:
                 return Color.ORANGE;
             case BASIC_EDITING:

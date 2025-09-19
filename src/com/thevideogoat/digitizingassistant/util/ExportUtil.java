@@ -38,21 +38,25 @@ public class ExportUtil {
     }
     
     public static void exportDigitizingSheet(Project project, Path outputPath, ExportType exportType, boolean includeCSV, boolean includeJSON) {
+        exportDigitizingSheet(project, outputPath, exportType, includeCSV, includeJSON, false);
+    }
+    
+    public static void exportDigitizingSheet(Project project, Path outputPath, ExportType exportType, boolean includeCSV, boolean includeJSON, boolean excludeCancelled) {
         try {
             String baseFileName = project.getName() + "_digitizing_sheet";
             
             // For client version, always generate HTML
             if (exportType == ExportType.CLIENT) {
                 String htmlFileName = project.getName() + "_digitizing_sheet_client_return_sheet.html";
-                exportDigitizingSheetHTML(project, outputPath.resolve(htmlFileName), exportType);
+                exportDigitizingSheetHTML(project, outputPath.resolve(htmlFileName), exportType, excludeCancelled);
             }
             
             if (includeCSV) {
-                exportDigitizingSheetCSV(project, outputPath.resolve(baseFileName + ".csv"), exportType);
+                exportDigitizingSheetCSV(project, outputPath.resolve(baseFileName + ".csv"), exportType, excludeCancelled);
             }
             
             if (includeJSON) {
-                exportDigitizingSheetJSON(project, outputPath.resolve(baseFileName + ".json"), exportType);
+                exportDigitizingSheetJSON(project, outputPath.resolve(baseFileName + ".json"), exportType, excludeCancelled);
             }
             
             JOptionPane.showMessageDialog(null, 
@@ -68,7 +72,7 @@ public class ExportUtil {
         }
     }
     
-    private static void exportDigitizingSheetCSV(Project project, Path outputPath, ExportType exportType) throws IOException {
+    private static void exportDigitizingSheetCSV(Project project, Path outputPath, ExportType exportType, boolean excludeCancelled) throws IOException {
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputPath.toFile()))) {
             // Write header
             if (exportType == ExportType.CLIENT) {
@@ -81,6 +85,10 @@ public class ExportUtil {
             // Write data
             int index = 1;
             for (Conversion conversion : project.getConversions()) {
+                // Skip cancelled conversions if requested
+                if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                    continue;
+                }
                 if (exportType == ExportType.CLIENT) {
                     // Client paper sheet columns: Conversion Note | # | Type | Status | Technician Notes | Logs
                     String technicianNotes = (conversion.technicianNotes != null && !conversion.technicianNotes.trim().isEmpty())
@@ -131,7 +139,7 @@ public class ExportUtil {
         }
     }
     
-    private static void exportDigitizingSheetJSON(Project project, Path outputPath, ExportType exportType) throws IOException {
+    private static void exportDigitizingSheetJSON(Project project, Path outputPath, ExportType exportType, boolean excludeCancelled) throws IOException {
         JsonObject projectJson = new JsonObject();
         projectJson.addProperty("projectName", project.getName());
         projectJson.addProperty("exportType", exportType.toString());
@@ -139,6 +147,10 @@ public class ExportUtil {
         
         JsonArray conversionsArray = new JsonArray();
         for (Conversion conversion : project.getConversions()) {
+            // Skip cancelled conversions if requested
+            if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                continue;
+            }
             JsonObject conversionJson = new JsonObject();
             
             if (exportType == ExportType.CLIENT) {
@@ -215,10 +227,14 @@ public class ExportUtil {
     }
     
     public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums) {
-        exportFileMap(project, outputPath, includeChecksums, 10); // Default max depth of 10
+        exportFileMap(project, outputPath, includeChecksums, 10, false); // Default max depth of 10, include cancelled
     }
     
     public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums, int maxDepth) {
+        exportFileMap(project, outputPath, includeChecksums, maxDepth, false); // Include cancelled by default
+    }
+    
+    public static void exportFileMap(Project project, Path outputPath, boolean includeChecksums, int maxDepth, boolean excludeCancelled) {
         try {
             // Pre-validation: Check for potential issues
             List<String> validationErrors = new ArrayList<>();
@@ -233,6 +249,10 @@ public class ExportUtil {
             int conversionsWithFiles = 0;
             int totalFiles = 0;
             for (Conversion conversion : project.getConversions()) {
+                // Skip cancelled conversions if requested
+                if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                    continue;
+                }
                 if (conversion.linkedFiles != null && !conversion.linkedFiles.isEmpty()) {
                     conversionsWithFiles++;
                     totalFiles += conversion.linkedFiles.size();
@@ -245,6 +265,10 @@ public class ExportUtil {
             
             // Check for potentially problematic paths
             for (Conversion conversion : project.getConversions()) {
+                // Skip cancelled conversions if requested
+                if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                    continue;
+                }
                 if (conversion.linkedFiles != null) {
                     for (FileReference fileRef : conversion.linkedFiles) {
                         try {
@@ -327,6 +351,10 @@ public class ExportUtil {
                     int processedConversions = 0;
                     
                     for (Conversion conversion : project.getConversions()) {
+                        // Skip cancelled conversions if requested
+                        if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                            continue;
+                        }
                         // Update progress
                         final int current = processedConversions;
                         SwingUtilities.invokeLater(() -> {
@@ -531,7 +559,7 @@ public class ExportUtil {
         }
     }
     
-    private static void exportDigitizingSheetHTML(Project project, Path outputPath, ExportType exportType) throws IOException {
+    private static void exportDigitizingSheetHTML(Project project, Path outputPath, ExportType exportType, boolean excludeCancelled) throws IOException {
         try (PrintWriter writer = new PrintWriter(new FileWriter(outputPath.toFile()))) {
             // Write HTML header with modern styling
             writer.println("<!DOCTYPE html>");
@@ -639,6 +667,7 @@ public class ExportUtil {
             writer.println("        .status-damaged { background: #dc3545; color: white; }");
             writer.println("        .status-damage-fixed { background: #ffc107; color: #212529; }");
             writer.println("        .status-damage-irreversible { background: #6f42c1; color: white; }");
+            writer.println("        .status-cancelled { background: #6c757d; color: white; }");
             writer.println("        .conversion-details {");
             writer.println("            display: grid;");
             writer.println("            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));");
@@ -767,6 +796,10 @@ public class ExportUtil {
             writer.println("        <h2 style=\"margin: 0; padding: 20px 20px 0 20px; color: #2c3e50;\">Media Items</h2>");
             
             for (Conversion conversion : project.getConversions()) {
+                // Skip cancelled conversions if requested
+                if (excludeCancelled && conversion.status == ConversionStatus.CANCELLED) {
+                    continue;
+                }
                 writer.println("        <div class=\"conversion-item\">");
                 
                 // Header with tape name and status
@@ -866,6 +899,7 @@ public class ExportUtil {
             case DAMAGED: return "damaged";
             case DAMAGE_FIXED: return "damage-fixed";
             case DAMAGE_IRREVERSIBLE: return "damage-irreversible";
+            case CANCELLED: return "cancelled";
             default: return "not-started";
         }
     }

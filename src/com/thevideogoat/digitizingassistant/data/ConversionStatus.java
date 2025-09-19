@@ -11,6 +11,7 @@ public enum ConversionStatus implements Serializable {
     DAMAGED("Damaged"),
     DAMAGE_FIXED("Damage Fixed"),
     DAMAGE_IRREVERSIBLE("Damage Irreversible"),
+    CANCELLED("Cancelled"),
     ;
 
     final String name;

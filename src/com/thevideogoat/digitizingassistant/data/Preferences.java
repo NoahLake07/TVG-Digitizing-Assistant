@@ -30,6 +30,11 @@ public class Preferences {
     private boolean stratCustom = false;
     private String stratCustomFormat = "{conversion_name} - {original_name}";
     
+    // Relink settings
+    private boolean relinkByNote = true;
+    private boolean relinkByTitle = true;
+    private boolean relinkByTrimmed = true;
+    
     private Preferences() {
         // Default values
         lastUsedDirectory = System.getProperty("user.home");
@@ -105,6 +110,11 @@ public class Preferences {
                 stratSmartReplace = Boolean.parseBoolean(props.getProperty("rename.strat.smartReplace", Boolean.toString(stratSmartReplace)));
                 stratCustom = Boolean.parseBoolean(props.getProperty("rename.strat.custom", Boolean.toString(stratCustom)));
                 stratCustomFormat = props.getProperty("rename.strat.customFormat", stratCustomFormat);
+                
+                // Relink settings
+                relinkByNote = Boolean.parseBoolean(props.getProperty("relink.byNote", Boolean.toString(relinkByNote)));
+                relinkByTitle = Boolean.parseBoolean(props.getProperty("relink.byTitle", Boolean.toString(relinkByTitle)));
+                relinkByTrimmed = Boolean.parseBoolean(props.getProperty("relink.byTrimmed", Boolean.toString(relinkByTrimmed)));
             } catch (IOException e) {
                 // Use defaults if loading fails
                 System.err.println("Could not load preferences: " + e.getMessage());
@@ -137,6 +147,11 @@ public class Preferences {
             props.setProperty("rename.strat.smartReplace", Boolean.toString(stratSmartReplace));
             props.setProperty("rename.strat.custom", Boolean.toString(stratCustom));
             props.setProperty("rename.strat.customFormat", stratCustomFormat);
+            
+            // Relink settings
+            props.setProperty("relink.byNote", Boolean.toString(relinkByNote));
+            props.setProperty("relink.byTitle", Boolean.toString(relinkByTitle));
+            props.setProperty("relink.byTrimmed", Boolean.toString(relinkByTrimmed));
             
             try (FileOutputStream fos = new FileOutputStream(prefsFile)) {
                 props.store(fos, "Digitizing Assistant Preferences");
@@ -179,4 +194,12 @@ public class Preferences {
     public void setStratCustom(boolean v) { this.stratCustom = v; savePreferences(); }
     public String getStratCustomFormat() { return stratCustomFormat; }
     public void setStratCustomFormat(String v) { this.stratCustomFormat = v; savePreferences(); }
+    
+    // Relink settings getters/setters
+    public boolean isRelinkByNote() { return relinkByNote; }
+    public void setRelinkByNote(boolean v) { this.relinkByNote = v; savePreferences(); }
+    public boolean isRelinkByTitle() { return relinkByTitle; }
+    public void setRelinkByTitle(boolean v) { this.relinkByTitle = v; savePreferences(); }
+    public boolean isRelinkByTrimmed() { return relinkByTrimmed; }
+    public void setRelinkByTrimmed(boolean v) { this.relinkByTrimmed = v; savePreferences(); }
 } 
