@@ -3,15 +3,18 @@
     <output-path>$PROJECT_DIR$/out/artifacts/DigitizingAssistant_jar</output-path>
     <root id="archive" name="DigitizingAssistant.jar">
       <element id="module-output" name="DigitizingAssistant" />
-      <element id="library" level="project" name="google.code.gson" />
-      <element id="library" level="project" name="uk.co.caprica.vlcj" />
-      <element id="file-copy" path="$PROJECT_DIR$/../../SimpleVideoEditor/out/artifacts/SimpleVideoNLE_jar/SimpleVideoNLE.jar" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/uk/co/caprica/vlcj/4.8.3/vlcj-4.8.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/uk/co/caprica/vlcj-natives/4.8.3/vlcj-natives-4.8.3.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/net/java/dev/jna/jna-jpms/5.14.0/jna-jpms-5.14.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/net/java/dev/jna/jna-platform-jpms/5.14.0/jna-platform-jpms-5.14.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$PROJECT_DIR$/../../SimpleVideoEditor/out/artifacts/SimpleVideoNLE_jar/SimpleVideoNLE.jar" path-in-jar="/" />
       <element id="dir-copy" path="$PROJECT_DIR$/../../SimpleVideoEditor/out" />
-      <element id="directory" name="res">
-        <element id="file-copy" path="$PROJECT_DIR$/res/tvgdigassistappicon.png" />
-        <element id="file-copy" path="$PROJECT_DIR$/res/tvgdigassistappicon0.png" />
-        <element id="file-copy" path="$PROJECT_DIR$/res/tvgdigassistappicon2.png" />
-      </element>
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/google/code/gson/gson/2.13.0/gson-2.13.0.jar" path-in-jar="/" />
+      <element id="extracted-dir" path="$MAVEN_REPOSITORY$/com/google/errorprone/error_prone_annotations/2.37.0/error_prone_annotations-2.37.0.jar" path-in-jar="/" />
+      <element id="dir-copy" path="$PROJECT_DIR$/res" />
+      <element id="file-copy" path="$PROJECT_DIR$/MANIFEST.MF" />
+      <element id="library" level="project" name="uk.co.caprica.vlcj" />
+      <element id="library" level="project" name="google.code.gson" />
     </root>
   </artifact>
 </component>
