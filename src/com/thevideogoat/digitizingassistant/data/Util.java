@@ -142,52 +142,18 @@ public class Util {
     }
 
     public static void relinkFiles(Project project) {
-        // Prompt the user to select a new directory
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        RelinkService.RelinkResult result = RelinkService.performRelink(
+            project, 
+            null, 
+            RelinkService.RelinkMode.INTERACTIVE, 
+            RelinkService.RelinkScope.ALL_CONVERSIONS, 
+            null
+        );
         
-        // Set the current directory to the last used directory
-        String lastDir = Preferences.getInstance().getLastUsedDirectory();
-        if (lastDir != null && new File(lastDir).exists()) {
-            fileChooser.setCurrentDirectory(new File(lastDir));
-        }
-        
-        int result = fileChooser.showOpenDialog(null);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File newDirectory = fileChooser.getSelectedFile();
-            
-            // Save the selected directory as the last used directory
-            Preferences.getInstance().setLastUsedDirectory(newDirectory.getAbsolutePath());
-
-            // For each conversion in the project
-            int i = 0, f = 0;
-            for (Conversion conversion : project.getConversions()) {
-                ArrayList<FileReference> updatedFiles = new ArrayList<>();
-
-                // For each linked file in the conversion
-                for (FileReference oldFile : conversion.linkedFiles) {
-                    File newFile = new File(newDirectory, oldFile.getName());
-
-                    // If a file with the same name is found in the new directory
-                    if (newFile.exists()) {
-                        updatedFiles.add(new FileReference(newFile));
-                        i++;
-                    } else {
-                        // If not found, keep the old file reference
-                        updatedFiles.add(oldFile);
-                        f++;
-                    }
-                }
-
-                // Update the conversion's linked files
-                conversion.linkedFiles = updatedFiles;
-            }
-
-            // Notify the user of completion
-            JOptionPane.showMessageDialog(null, i+" files relinked successfully.", "Relink Success", JOptionPane.INFORMATION_MESSAGE);
-            if(f>0) JOptionPane.showMessageDialog(null, f+" files couldn't be relinked.", "Relink Failure", JOptionPane.INFORMATION_MESSAGE);
-        }
+        JOptionPane.showMessageDialog(null,
+            result.message,
+            result.success ? "Relink Success" : "Relink Failed",
+            result.success ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
     }
 
     public static ArrayList<Conversion> sortConversionsBy(ArrayList<Conversion> conversions, String criteria) {
@@ -1084,108 +1050,12 @@ public class Util {
     }
 
     public static void relinkToTrimmedFiles(Project project) {
-        // Prompt the user to select the directory containing trimmed files
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        RelinkService.RelinkResult result = RelinkService.performTrimmedRelink(project, null);
         
-        // Set the current directory to the last used directory
-        String lastDir = Preferences.getInstance().getLastUsedDirectory();
-        if (lastDir != null && new File(lastDir).exists()) {
-            fileChooser.setCurrentDirectory(new File(lastDir));
-        }
-        
-        int result = fileChooser.showOpenDialog(null);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File trimmedDirectory = fileChooser.getSelectedFile();
-            
-            // Save the selected directory as the last used directory
-            Preferences.getInstance().setLastUsedDirectory(trimmedDirectory.getAbsolutePath());
-
-            // Create options dialog
-            String[] options = {
-                "Replace matching files with trimmed versions",
-                "Add trimmed files to existing linked files"
-            };
-
-            int choice = JOptionPane.showOptionDialog(null,
-                "How would you like to handle the trimmed files?",
-                "Relink Options",
-                JOptionPane.DEFAULT_OPTION,
-                JOptionPane.QUESTION_MESSAGE,
-                null,
-                options,
-                options[0]);
-
-            if (choice == -1) return; // User cancelled
-
-            int replacedCount = 0;
-            int addedCount = 0;
-            int removedCount = 0;
-            ArrayList<FileReference> filesToRemove = new ArrayList<>();
-
-            // For each conversion in the project
-            for (Conversion conversion : project.getConversions()) {
-                ArrayList<FileReference> updatedFiles = new ArrayList<>();
-
-                // For each linked file in the conversion
-                for (FileReference oldFile : conversion.linkedFiles) {
-                    String oldName = oldFile.getName();
-                    String baseName = oldName.substring(0, oldName.lastIndexOf('.'));
-                    String extension = oldName.substring(oldName.lastIndexOf('.'));
-                    
-                    // Simply append _trimmed to the original filename before the extension
-                    String trimmedName = baseName + "_trimmed" + extension;
-                    
-                    File trimmedFile = new File(trimmedDirectory, trimmedName);
-
-                    if (trimmedFile.exists()) {
-                        if (choice == 0) {
-                            // Option 1: Replace matching files
-                            updatedFiles.add(new FileReference(trimmedFile));
-                            replacedCount++;
-                        } else {
-                            // Option 2: Add trimmed files to existing
-                            updatedFiles.add(oldFile);
-                            updatedFiles.add(new FileReference(trimmedFile));
-                            addedCount++;
-                        }
-                    } else {
-                        // If trimmed file not found, ask user if they want to remove it
-                        int removeChoice = JOptionPane.showConfirmDialog(null,
-                            "No trimmed version found for: " + oldName + "\n\nWould you like to remove this file from the linked files?",
-                            "File Not Found",
-                            JOptionPane.YES_NO_OPTION,
-                            JOptionPane.QUESTION_MESSAGE);
-                        
-                        if (removeChoice == JOptionPane.YES_OPTION) {
-                            filesToRemove.add(oldFile);
-                            removedCount++;
-                        } else {
-                            // Keep the original file if user chooses not to remove it
-                            updatedFiles.add(oldFile);
-                        }
-                    }
-                }
-
-                // Update the conversion's linked files
-                conversion.linkedFiles = updatedFiles;
-            }
-
-            // Notify the user of completion
-            StringBuilder message = new StringBuilder();
-            
-            if (choice == 0) {
-                message.append(String.format("%d files replaced with trimmed versions.", replacedCount));
-            } else {
-                message.append(String.format("%d trimmed files added to existing linked files.", addedCount));
-            }
-            
-            if (removedCount > 0) {
-                message.append(String.format("\n%d files were removed because no trimmed versions were found.", removedCount));
-            }
-            
-            JOptionPane.showMessageDialog(null, message.toString(), "Relink Success", JOptionPane.INFORMATION_MESSAGE);
+        if (result.success) {
+            JOptionPane.showMessageDialog(null, result.message, "Relink Success", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(null, result.message, "Relink Failed", JOptionPane.WARNING_MESSAGE);
         }
     }
 }

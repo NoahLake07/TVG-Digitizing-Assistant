@@ -414,26 +414,37 @@ public class ProjectFrame extends JFrame {
         JMenuItem relinkByNote = new JMenuItem("Relink by Conversion Note");
         relinkByNote.addActionListener(e -> {
             ArrayList<FileReference> allFiles = getAllFilesInProjectDirectories();
-            int relinked = 0;
-            for (Conversion c : project.getConversions()) {
-                String noteNorm = normalizeFilename(c.note);
-                for (FileReference fileRef : allFiles) {
-                    String fileNorm = normalizeFilename(fileRef.getName());
-                    if (!noteNorm.isEmpty() && fileNorm.contains(noteNorm)) {
-                        c.linkedFiles.clear();
-                        c.linkedFiles.add(fileRef);
-                        relinked++;
-                        logFileOperation("RELINK BY NOTE", "Linked conversion '" + c.name + "' to file: " + fileRef.getPath());
-                        break;
-                    }
-                }
+            RelinkService.RelinkResult result = RelinkService.performRelinkByNote(project, allFiles);
+            
+            // Log the operations
+            if (result.success && result.filesRelinked > 0) {
+                logFileOperation("BULK RELINK BY NOTE", "Successfully relinked " + result.filesRelinked + " conversions by note");
             }
+            
             JOptionPane.showMessageDialog(this,
-                "Relinked " + relinked + " conversions by note.",
-                "Relink by Note",
-                JOptionPane.INFORMATION_MESSAGE);
+                result.message,
+                result.success ? "Relink by Note" : "Relink Failed",
+                result.success ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
         });
         menu.add(relinkByNote);
+        
+        // Add smart bulk relink option
+        JMenuItem smartBulkRelink = new JMenuItem("Smart Bulk Relink");
+        smartBulkRelink.setToolTipText("Intelligently relink all conversions using smart matching algorithms");
+        smartBulkRelink.addActionListener(e -> {
+            RelinkService.RelinkResult result = RelinkService.performSmartBulkRelink(project, this);
+            
+            // Log the operations
+            if (result.success && result.filesRelinked > 0) {
+                logFileOperation("SMART BULK RELINK", "Successfully relinked " + result.filesRelinked + " conversions using smart matching");
+            }
+            
+            JOptionPane.showMessageDialog(this,
+                result.message,
+                result.success ? "Smart Bulk Relink" : "Relink Failed",
+                result.success ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.WARNING_MESSAGE);
+        });
+        menu.add(smartBulkRelink);
         
         openProjectFolder.addActionListener(e -> {
             try {
