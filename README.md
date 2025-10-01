@@ -1,4 +1,4 @@
-# Digitizing Assistant v1.6.2
+# TVG Digitizing Assistant v1.6.5
 
 A Java-based application for managing video digitization projects with enhanced damage tracking and export capabilities.
 
